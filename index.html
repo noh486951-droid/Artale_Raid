@@ -404,10 +404,16 @@
         }
 
         // ==========================================
-        // 核心修正：將出團名單打包送給 Apps Script 大腦！
+        // 核心修正：加入輸入頻道對話框，並打包送給大腦
         // ==========================================
         async function sendFinalize() {
             if (!adminSelection) return;
+
+            // 【新增】跳出視窗詢問頻道
+            let channelInput = prompt("💬 請輸入此次出團的集合頻道 (預設為 529)：", "529");
+            if (channelInput === null) return; // 如果團長按取消，就中斷定案
+            if (channelInput.trim() === "") channelInput = "529"; // 如果清空按確認，強制塞回 529
+
             playSound('success'); 
             confetti({ particleCount: 150, spread: 100, origin: { y: 0.6 }, colors: ['#06b6d4', '#10b981', '#f59e0b', '#ec4899'] });
 
@@ -419,7 +425,6 @@
             const weekStr = document.getElementById('currentWeekRange').innerText;
             const weekSchedules = db.schedules.filter(s => s[0] === weekStr);
             
-            // 抓取被選中時段的出團名單
             const participants = weekSchedules.filter(s => {
                 try { 
                     if (s[2] === "OFF") return false;
@@ -437,13 +442,13 @@
                     week: weekStr, 
                     raidName: raidName, 
                     finalTime: adminSelection,
-                    participants: participants // 傳送名單給 LINE
+                    participants: participants,
+                    channel: channelInput // 【新增】傳送頻道給 LINE
                 })
             });
             
             setTimeout(() => { location.reload(); }, 2000); 
         }
-
         function changeWeek(idx) {
             playSound('click'); currentWeek = idx;
             [0,1,2].forEach(i => document.getElementById(`w${i}`).className = (i === idx) ? "px-5 py-1.5 rounded-lg text-xs font-bold bg-cyan-600 text-white shadow-lg" : "px-5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition-colors");
@@ -467,4 +472,5 @@
         init();
     </script>
 </body>
+
 </html>
