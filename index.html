@@ -342,7 +342,9 @@
             const body = document.getElementById('gridBody'); body.innerHTML = '';
             const weekStr = document.getElementById('currentWeekRange').innerText; const raidKey = document.getElementById('raidSelect').value; const raidInfo = bossData[raidKey];
             const weekSchedules = db.schedules.filter(s => s[0] === weekStr);
-            const finalized = db.finalized.find(f => f[0] === weekStr && f[1] === raidInfo.name);
+            
+            // 【核心修正】將 find 改成 filter，抓出該副本本週「所有」定案的時間，並存成陣列
+            const finalizedList = db.finalized.filter(f => f[0] === weekStr && f[1] === raidInfo.name).map(f => f[2]);
 
             for(let h=18; h<=22; h++) {
                 [0, 30].forEach(m => {
@@ -353,7 +355,9 @@
                             try { if (s[2] === "OFF") return false; const parsed = JSON.parse(s[2]); if (parsed[raidKey]) return !!parsed[raidKey][cellId]; return !!parsed[cellId]; } catch(e) { return false; }
                         }).map(s => s[1]);
 
-                        let finalClass = (finalized && finalized[2] === cellId) ? 'cell-final' : (peeps.length === 0 ? 'cell-none' : (peeps.length >= raidInfo.min ? (raidInfo.req.every(req => peeps.some(pName => { const m = db.members.find(mem => mem[0] === pName); return m && m[1].includes(req); })) ? 'cell-perfect' : 'cell-lack') : 'cell-partial')) + " flex items-center justify-center text-[11px] font-black drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]";
+                        // 【核心修正】判斷這個格子是否包含在「所有定案時間(finalizedList)」裡面
+                        let finalClass = (finalizedList.includes(cellId)) ? 'cell-final' : (peeps.length === 0 ? 'cell-none' : (peeps.length >= raidInfo.min ? (raidInfo.req.every(req => peeps.some(pName => { const m = db.members.find(mem => mem[0] === pName); return m && m[1].includes(req); })) ? 'cell-perfect' : 'cell-lack') : 'cell-partial')) + " flex items-center justify-center text-[11px] font-black drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]";
+                        
                         if (isReporting && selectedTimes[cellId]) finalClass += " cell-editing"; else if (!isReporting && adminSelection === cellId) finalClass += " cell-admin-selected";
                         if (isReporting && !selectedTimes[cellId]) finalClass += " opacity-40";
 
@@ -474,3 +478,4 @@
 </body>
 
 </html>
+
