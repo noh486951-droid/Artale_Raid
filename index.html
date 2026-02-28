@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Artale Raid Commander Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Noto+Sans+TC:wght@400;900&display=swap');
+        body { color: #f1f5f9; font-family: 'Noto Sans TC', sans-serif; overflow-x: hidden; min-height: 100vh; }
+        .font-cyber { font-family: 'Orbitron', sans-serif; }
+        .glass-card { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(16px); border: 1px solid rgba(56, 189, 248, 0.15); box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5); }
+        .cell { height: 32px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05); cursor: pointer; transition: 0.1s; position: relative; }
+        .cell-none { background: rgba(15, 23, 42, 0.8); }
+        .cell-partial { background: #6366f1; box-shadow: 0 0 10px rgba(99, 102, 241, 0.6); } 
+        .cell-perfect { background: #10b981; box-shadow: 0 0 10px rgba(16, 185, 129, 0.8); } 
+        .cell-lack { background: #f59e0b; box-shadow: 0 0 10px rgba(245, 158, 11, 0.8); } 
+        .cell-final { background: #06b6d4; border: 2px solid white; box-shadow: 0 0 15px #06b6d4; } 
+        .cell-editing { border: 2px solid #22d3ee !important; background: rgba(34, 211, 238, 0.3) !important; box-shadow: inset 0 0 15px #22d3ee; }
+        .cell-admin-selected { border: 3px solid #818cf8 !important; box-shadow: 0 0 15px #818cf8 !important; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        select { background-color: rgba(15, 23, 42, 0.9); color: #22d3ee; font-weight: bold; }
+        select option { background-color: #0f172a; color: #f8fafc; }
+        @keyframes goldenGlow {
+            0%, 100% { box-shadow: 0 0 10px #fbbf24; border-color: #fbbf24; color: #fbbf24; }
+            50% { box-shadow: 0 0 25px #f59e0b; border-color: #f59e0b; color: #fff; text-shadow: 0 0 10px #fff; }
+        }
+        .lucky-channel { animation: goldenGlow 1.5s infinite; font-weight: 900; }
+    </style>
+</head>
+<body class="p-4 lg:p-8 pb-[350px] md:pb-24 relative">
+    <div id="pageBg" class="fixed inset-0 z-[-1] transition-colors duration-1000 bg-[#020617]"></div>
+
+    <div id="loginScreen" class="fixed inset-0 z-[100] bg-[#020617] flex flex-col items-center justify-center p-6 transition-opacity duration-500">
+        <div class="glass-card p-10 rounded-3xl max-w-sm w-full border-cyan-500/30 text-center shadow-[0_0_50px_rgba(6,182,212,0.1)]">
+            <div class="w-20 h-20 bg-cyan-950 rounded-2xl mx-auto mb-6 flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.3)] border border-cyan-500/50">
+                <i class="fas fa-dragon text-4xl text-cyan-400"></i>
+            </div>
+            <h1 class="text-2xl font-black italic tracking-tighter text-cyan-400 font-cyber mb-1">ARTALE</h1>
+            <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-8">Raid Commander</h2>
+            <div id="loginLoading" class="text-cyan-500 text-sm font-bold animate-pulse"><i class="fas fa-circle-notch fa-spin mr-2"></i>連線至資料庫中...</div>
+            <div id="loginForm" class="hidden space-y-4">
+                <div class="text-left">
+                    <label class="text-[10px] text-slate-500 font-bold uppercase tracking-widest ml-1">Select Identity</label>
+                    <select id="loginSelect" onchange="handleLoginChange()" class="w-full mt-1 bg-slate-900 p-3 rounded-xl text-sm border border-slate-700 text-white outline-none focus:border-cyan-500">
+                        <option value="">選擇您的角色 ID...</option>
+                    </select>
+                </div>
+                <div id="pwdContainer" class="text-left hidden">
+                    <label class="text-[10px] text-pink-500 font-bold uppercase tracking-widest ml-1"><i class="fas fa-lock mr-1"></i>Admin Password</label>
+                    <input type="password" id="loginPwd" placeholder="請輸入團長密碼" class="w-full mt-1 bg-slate-900 border border-pink-900/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-pink-500 text-white">
+                </div>
+                <button onclick="doLogin()" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-3.5 rounded-xl font-black shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all transform hover:scale-105 mt-4">
+                    進 入 指 揮 中 心
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="mainApp" class="max-w-7xl mx-auto hidden opacity-0 transition-opacity duration-500">
+        <header class="flex flex-col lg:flex-row justify-between items-center mb-6 gap-6 border-b border-white/10 pb-6">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 bg-cyan-500 rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.5)]"><i class="fas fa-dragon text-2xl text-slate-900"></i></div>
+                <div>
+                    <h1 class="text-3xl font-black italic tracking-tighter text-cyan-400 font-cyber drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">ARTALE COMMANDER</h1>
+                    <div id="currentWeekRange" class="text-[10px] text-cyan-100 font-cyber uppercase tracking-widest mt-1 opacity-70">System Online</div>
+                </div>
+            </div>
+            <div class="flex flex-col items-end gap-3">
+                <div class="flex items-center gap-3 bg-black/40 px-4 py-2 rounded-lg border border-white/10 backdrop-blur-sm">
+                    <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_5px_#4ade80] animate-pulse"></div><span class="text-xs text-slate-300">登入為:</span><span id="displayUserName" class="text-cyan-400 text-sm font-black">載入中</span></div>
+                    <div class="w-px h-4 bg-slate-700 mx-1"></div><button onclick="logout()" class="text-xs text-slate-400 hover:text-white transition-colors">切換</button>
+                </div>
+                <div class="flex bg-black/40 p-1 rounded-xl border border-white/10 backdrop-blur-sm">
+                    <button onclick="changeWeek(0)" id="w0" class="px-5 py-1.5 rounded-lg text-xs font-bold bg-cyan-600 text-white shadow-lg">本週</button>
+                    <button onclick="changeWeek(1)" id="w1" class="px-5 py-1.5 rounded-lg text-xs font-bold text-slate-300">下週</button>
+                    <button onclick="changeWeek(2)" id="w2" class="px-5 py-1.5 rounded-lg text-xs font-bold text-slate-300">次週</button>
+                </div>
+            </div>
+        </header>
+
+        <div class="flex flex-wrap gap-3 mb-6">
+            <a href="https://a2983456456.github.io/artale-drop/" target="_blank" class="flex items-center gap-2 bg-black/40 hover:bg-cyan-900/40 border border-white/10 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-300 px-4 py-2 rounded-xl text-xs font-bold transition-all backdrop-blur-sm shadow-sm"><i class="fas fa-search-dollar text-cyan-400"></i> 全怪物掉落物查詢</a>
+            <a href="https://artale-market.org/" target="_blank" class="flex items-center gap-2 bg-black/40 hover:bg-pink-900/40 border border-white/10 hover:border-pink-500/50 text-slate-300 hover:text-pink-300 px-4 py-2 rounded-xl text-xs font-bold transition-all backdrop-blur-sm shadow-sm"><i class="fas fa-store text-pink-400"></i> 第三方自由交易平台</a>
+            <a href="https://docs.google.com/spreadsheets/d/1lPS_dyOfFe04SbmavvqAZT6GVTOuN-F-qSXDhQlpfUY/edit?gid=0#gid=0" target="_blank" class="flex items-center gap-2 bg-black/40 hover:bg-yellow-900/40 border border-white/10 hover:border-yellow-500/50 text-slate-300 hover:text-yellow-300 px-4 py-2 rounded-xl text-xs font-bold transition-all backdrop-blur-sm shadow-sm"><i class="fas fa-book-open text-yellow-400"></i> 全職業技能攻略</a>
+        </div>
+
+        <div class="grid grid-cols-12 gap-6">
+            <aside class="col-span-12 lg:col-span-4 space-y-6">
+                <div class="glass-card overflow-hidden rounded-3xl relative min-h-[160px] flex flex-col justify-end border-t border-white/20">
+                    <img id="bossAvatar" src="./img/zakum.png" class="absolute inset-0 w-full h-full object-cover opacity-50 mix-blend-screen transition-all duration-700">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent"></div>
+                    <div class="relative p-6">
+                        <select id="raidSelect" onchange="updateUI()" class="w-full bg-transparent text-2xl font-black outline-none cursor-pointer text-cyan-300 border-none drop-shadow-lg">
+                            <option value="zakum">殘暴炎魔 (6人)</option>
+                            <option value="papu_n">普通拉圖斯</option>
+                            <option value="papu_h">困難拉圖斯 (6人)</option>
+                            <option value="horntail">暗黑龍王 (12人)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="glass-card p-5 rounded-3xl border-yellow-500/20 bg-gradient-to-br from-black/60 to-yellow-900/10">
+                    <h4 class="text-[10px] font-black text-yellow-500 uppercase tracking-widest mb-3 italic"><i class="fas fa-star mr-1"></i>Daily Fortune</h4>
+                    <div class="space-y-3">
+                        <div class="bg-black/40 p-3 rounded-xl border border-white/5"><p class="text-xs text-slate-400 mb-2">🌍 今日全服幸運頻道</p><div id="luckyChannel" class="flex flex-wrap gap-2"></div></div>
+                        <div class="bg-black/40 p-3 rounded-xl border border-white/5"><p class="text-xs text-slate-400 mb-1">🔮 專屬玄學運勢</p><p id="personalFortune" class="text-sm font-bold leading-relaxed">載入中...</p></div>
+                        <div class="bg-black/40 p-3 rounded-xl border border-white/5"><p class="text-xs text-slate-400 mb-1">👕 幸運穿搭指引</p><p id="luckyOutfit" class="text-[13px] font-bold text-pink-300 leading-relaxed">載入中...</p></div>
+                    </div>
+                </div>
+
+                <div class="glass-card p-5 rounded-3xl border-pink-500/20 bg-black/20">
+                    <h4 class="text-[10px] font-black text-pink-400 uppercase tracking-widest mb-3 italic"><i class="fas fa-gift mr-1"></i>Loot Wishlist</h4>
+                    <div id="wishlistBox" class="space-y-2 max-h-40 overflow-y-auto pr-2"></div>
+                </div>
+
+                <div class="glass-card p-6 rounded-3xl space-y-5">
+                    <div><h4 class="text-[10px] font-black text-cyan-500 uppercase tracking-widest mb-1 italic">Raid Notes</h4><p id="raidNotes" class="text-xs text-slate-200 italic leading-relaxed">載入中...</p></div>
+                    <div class="pt-4 border-t border-white/10"><h4 class="text-[10px] font-black text-red-400 uppercase tracking-widest mb-2 italic">Pending Report (未回報)</h4><div id="pendingList" class="flex flex-wrap gap-2"></div></div>
+                </div>
+
+                <div id="adminPanel" class="glass-card p-6 rounded-3xl border-indigo-500/50 hidden bg-indigo-950/40">
+                    <h3 class="text-[10px] font-black text-indigo-400 mb-4 tracking-widest uppercase italic"><i class="fas fa-crown mr-2"></i>Commander's Verdict</h3>
+                    <div class="p-3 bg-black/50 rounded-xl border border-indigo-500/30 text-center shadow-inner">
+                        <p class="text-[10px] text-slate-300 mb-2">請在右側點擊綠色格子後定案</p>
+                        <p id="selectedTimeLabel" class="text-sm font-black text-white mb-3 drop-shadow-md">尚未選取時段</p>
+                        <button id="btnFinalize" disabled onclick="sendFinalize()" class="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white px-4 py-2 rounded-lg text-xs font-black transition-all shadow-lg shadow-indigo-900/50">發布 MISSION 鎖定</button>
+                    </div>
+                </div>
+
+                <div class="glass-card p-6 rounded-3xl">
+                    <h3 class="text-[10px] font-black text-slate-400 mb-4 tracking-widest uppercase italic">Tactical Chat</h3>
+                    <div id="chatBox" class="h-32 overflow-y-auto space-y-2 mb-4 text-[11px] pr-2"></div>
+                    <div class="flex gap-2">
+                        <input type="text" id="chatInput" placeholder="留言..." class="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-1.5 text-xs outline-none focus:border-cyan-500 text-white">
+                        <button onclick="sendChat()" class="text-cyan-400 px-2 hover:text-cyan-300"><i class="fas fa-paper-plane text-lg"></i></button>
+                    </div>
+                </div>
+            </aside>
+
+            <section class="col-span-12 lg:col-span-8">
+                <div class="glass-card p-6 lg:p-8 rounded-3xl h-full relative overflow-hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-black font-cyber italic tracking-tighter drop-shadow-md">TIME MATRIX</h2>
+                        <button id="btnStartReport" onclick="startReportMode()" class="bg-cyan-500 hover:bg-cyan-400 text-slate-950 px-5 py-2.5 rounded-xl text-xs font-black shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all transform hover:scale-105"><i class="fas fa-calendar-check mr-2"></i>回報此副本時間</button>
+                    </div>
+                    <div class="flex flex-wrap gap-4 text-[9px] font-bold text-slate-300 mb-4 bg-black/30 p-2.5 rounded-lg inline-flex border border-white/5">
+                        <span class="flex items-center gap-1"><div class="w-3 h-3 bg-[#6366f1] rounded-sm"></div> 有人 (未達標)</span>
+                        <span class="flex items-center gap-1"><div class="w-3 h-3 bg-[#10b981] rounded-sm"></div> 人滿職齊</span>
+                        <span class="flex items-center gap-1"><div class="w-3 h-3 bg-[#f59e0b] rounded-sm"></div> 滿人缺職</span>
+                        <span class="flex items-center gap-1"><div class="w-3 h-3 bg-[#06b6d4] border border-white rounded-sm"></div> 團長定案</span>
+                    </div>
+                    <div class="overflow-x-auto pb-2">
+                        <table class="w-full border-separate border-spacing-1.5 text-center select-none">
+                            <thead><tr class="text-slate-300 text-[10px] font-cyber uppercase tracking-wider"><th class="p-2">H:M</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th class="text-cyan-300">Sat</th><th class="text-cyan-300">Sun</th></tr></thead>
+                            <tbody id="gridBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <div id="reportActionBar" class="fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-xl border-t border-cyan-500/50 p-4 transform translate-y-full transition-transform duration-300 z-50 flex flex-col sm:flex-row items-center justify-center gap-4 shadow-[0_-15px_40px_rgba(0,0,0,0.5)]">
+        <div class="flex items-center bg-black/50 border border-pink-500/30 rounded-lg px-3 py-2 mr-2">
+            <span class="text-pink-400 text-xs font-bold mr-2 whitespace-nowrap"><i class="fas fa-star"></i> 我想許願:</span>
+            <select id="lootWishlist" class="bg-transparent text-white text-xs outline-none w-32 md:w-48"><option value="">(無)</option></select>
+        </div>
+        <button onclick="saveMySchedule(false)" class="w-full sm:w-auto bg-cyan-500 hover:bg-cyan-400 text-slate-950 px-6 py-3 rounded-xl font-black shadow-[0_0_15px_rgba(34,211,238,0.4)] transition-all">確認並送出</button>
+        <button onclick="saveMySchedule(true)" class="w-full sm:w-auto bg-red-950 hover:bg-red-900 text-red-300 px-4 py-3 rounded-xl font-bold border border-red-800 transition-colors">本週全休</button>
+        <button onclick="cancelReportMode()" class="w-full sm:w-auto bg-white/10 hover:bg-white/20 text-slate-200 px-4 py-3 rounded-xl transition-colors font-bold">取消</button>
+    </div>
+
+    <script>
+        // ★★★ 你的專屬 API 網址已完美寫入 ★★★
+        const API_URL = "https://script.google.com/macros/s/AKfycbx7JA9nHTpB1M9xRxSVy0U7_JEzVe8-Qoe1L4Nsj4IK1EcCiaoYx93p4w5oYQLDBVKYoA/exec";
+        
+        const ADMIN_ID = "Hero-咕咕嘎嘎"; 
+        const ADMIN_PWD = "1"; 
+        
+        let currentUser = null; 
+        let currentWeek = 0;
+        let db = null;
+        let isReporting = false; 
+        let selectedTimes = {}; 
+        let adminSelection = null;
+        let globalMasterSchedule = {}; 
+
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            if (type === 'click') {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(800, audioCtx.currentTime); osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.05);
+                gain.gain.setValueAtTime(0.05, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.05);
+            } else if (type === 'success') {
+                osc.type = 'square'; const now = audioCtx.currentTime;
+                osc.frequency.setValueAtTime(440, now); osc.frequency.setValueAtTime(554, now + 0.1); osc.frequency.setValueAtTime(659, now + 0.2); osc.frequency.setValueAtTime(880, now + 0.3); 
+                gain.gain.setValueAtTime(0.08, now); gain.gain.linearRampToValueAtTime(0, now + 0.6);
+                osc.start(now); osc.stop(now + 0.6);
+            }
+        }
+
+        const bossData = {
+            zakum: { name: "殘暴炎魔 (6人)", img: "./img/zakum.png", min: 6, req: ["法師", "黑騎"], bgColor: "#1f0606", loot: ["殘暴炎魔頭盔", "殘暴炎魔戒指箱", "克利思拳套"] }, 
+            papu_n: { name: "普通拉圖斯", img: "./img/papu_n.png", min: 1, req: [], bgColor: "#020617", loot: ["異界靈魂", "發條鐘", "拉圖斯腰帶", "(技能書)無雙劍舞30", "(技能書)瞬步連擊30"] }, 
+            papu_h: { name: "困難拉圖斯 (6人)", img: "./img/papu_h.png", min: 6, req: ["法師", "黑騎"], bgColor: "#170b29", loot: ["拉圖斯寶箱", "(技能書)挑釁30", "(技能書)致命暗殺30", "(技能書)冰火連擊30"] }, 
+            horntail: { name: "暗黑龍王 (12人)", img: "./img/horntail.png", min: 12, req: ["黑騎", "主教"], bgColor: "#041c13", loot: ["⚠️ 尚未開放，敬請期待"] } 
+        };
+
+        const fortunes = [
+            { type: "大吉", text: "今日運勢極佳，點 10% 卷軸跟點 100% 一樣過，王裝絕對有你的份！", color: "text-red-400" },
+            { type: "大吉", text: "幸運女神降臨！打綿羊掉日鏢、打巴洛古噴月牙，打王連紫色棉被都狂掉！", color: "text-red-400" },
+            { type: "大吉", text: "神功護體！今日撿到的裝備素質必定頂屬，綠菇菇看了你都繞道走！", color: "text-red-400" },
+            { type: "小吉", text: "今日運勢不錯，適合衝 60% 的日子，但 10% 還是別輕易嘗試喔～", color: "text-orange-400" },
+            { type: "小吉", text: "今日打王手氣轉旺，有高機率摸到高價值裝備，記得緊跟團長！", color: "text-orange-400" },
+            { type: "平平", text: "打王前請多做善事（例如帶新手），累積你的幸運能量！", color: "text-green-400" },
+            { type: "平平", text: "打王前請大聲讚美隊友，說不定隊友一高興就把寶分給你了～", color: "text-green-400" },
+            { type: "平平", text: "無風無雨的一天。去自由市場逛逛，說不定能撿到便宜的漏！", color: "text-green-400" },
+            { type: "小凶", text: "今日運勢不佳，請小心炎魔的魔法攻擊，一個不注意你可能就趴了。", color: "text-slate-400" },
+            { type: "小凶", text: "忍耐任務極度不順，今天跳前置可能會掉下去 50 次，建議改天再來。", color: "text-slate-400" },
+            { type: "大凶", text: "今日業障偏重，打王極易斷線或卡頓，建議開打前重開機並祈禱伺服器順暢。", color: "text-slate-500" }
+        ];
+
+        const luckyColors = ["神秘黑", "熱血紅", "冰晶藍", "幸運綠", "閃耀黃", "純潔白", "暗黑紫", "低調灰"];
+        const luckyItems = ["搞笑點裝武器", "狗鼻子 或 貓咪嘴唇", "浮誇的點裝帽子", "透明披風 (低調才是王道)", "把你的寵物收起來", "帶著會說話的寵物", "復古的紙袋頭套", "任何有翅膀的裝備", "殘暴炎魔頭盔", "閃亮的太陽眼鏡"];
+
+        function mulberry32(a) {
+            return function() {
+              var t = a += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            }
+        }
+
+        async function init() { updateDates(); await fetchData(); }
+
+        async function fetchData() {
+            try {
+                const res = await fetch(API_URL); db = await res.json(); setupLoginScreen();
+            } catch (e) { document.getElementById('loginLoading').innerHTML = '<i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>連線失敗，請檢查 API 網址'; }
+        }
+
+        function setupLoginScreen() {
+            document.getElementById('loginLoading').style.display = 'none';
+            document.getElementById('loginForm').classList.remove('hidden');
+            const select = document.getElementById('loginSelect');
+            select.innerHTML += db.members.slice(1).map(m => `<option value="${m[0]}">${m[0]} (${m[1]})</option>`).join('');
+            const savedId = localStorage.getItem('artale_raid_id');
+            if (savedId && db.members.find(m => m[0] === savedId)) { select.value = savedId; handleLoginChange(); }
+        }
+
+        function handleLoginChange() {
+            const val = document.getElementById('loginSelect').value;
+            val === ADMIN_ID ? document.getElementById('pwdContainer').classList.remove('hidden') : document.getElementById('pwdContainer').classList.add('hidden');
+        }
+
+        function doLogin() {
+            const user = document.getElementById('loginSelect').value;
+            if (!user) return alert('請先選擇您的角色身分！');
+            if (user === ADMIN_ID && document.getElementById('loginPwd').value !== ADMIN_PWD) return alert('❌ 團長密碼錯誤！');
+
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            playSound('click');
+
+            currentUser = user; localStorage.setItem('artale_raid_id', user);
+            const loginScreen = document.getElementById('loginScreen');
+            loginScreen.style.opacity = '0';
+            setTimeout(() => {
+                loginScreen.style.display = 'none';
+                document.getElementById('mainApp').classList.remove('hidden');
+                setTimeout(() => document.getElementById('mainApp').style.opacity = '1', 50);
+                document.getElementById('displayUserName').innerText = currentUser;
+                generateDailyFortune(); checkAdmin(); updateUI();
+            }, 500);
+        }
+
+        function logout() { localStorage.removeItem('artale_raid_id'); location.reload(); }
+
+        function generateDailyFortune() {
+            const today = new Date(); const dateSeed = today.getFullYear() * 10000 + (today.getMonth()+1) * 100 + today.getDate();
+            const globalRng = mulberry32(dateSeed);
+            let channels = [];
+            while(channels.length < 3) { let ch = Math.floor(globalRng() * 2499) + 1; if(!channels.includes(ch)) channels.push(ch); }
+            let hasLuckyEgg = false;
+            if (globalRng() < 0.05 && !channels.includes(529)) { channels[0] = 529; hasLuckyEgg = true; } else if (channels.includes(529)) { hasLuckyEgg = true; }
+            channels.sort((a,b) => a-b);
+            const channelEl = document.getElementById('luckyChannel');
+            let channelHtml = channels.map(ch => {
+                if (ch === 529) return `<span class="bg-yellow-900/40 border border-yellow-500 text-yellow-400 px-2 py-1 rounded-md lucky-channel">CH 529</span>`;
+                return `<span class="bg-cyan-900/40 border border-cyan-700/50 text-cyan-300 font-cyber px-2 py-1 rounded-md shadow-sm">CH ${ch}</span>`;
+            }).join('');
+            if (hasLuckyEgg) channelHtml += `<div class="w-full text-[10px] text-yellow-400 mt-1 font-bold animate-pulse">🌟 發現超稀有隱藏幸運頻道！</div>`;
+            channelEl.innerHTML = channelHtml;
+
+            let nameScore = 0; for(let i=0; i<currentUser.length; i++) nameScore += currentUser.charCodeAt(i);
+            const personalRng = mulberry32(dateSeed + nameScore);
+            const fortune = fortunes[Math.floor(personalRng() * fortunes.length)];
+            document.getElementById('personalFortune').innerHTML = `<span class="${fortune.color}">【${fortune.type}】</span><br><span class="text-slate-300 text-xs">${fortune.text}</span>`;
+            document.getElementById('luckyOutfit').innerHTML = `幸運色：<span class="text-white">${luckyColors[Math.floor(personalRng() * luckyColors.length)]}</span><br>建議搭配：<span class="text-white">${luckyItems[Math.floor(personalRng() * luckyItems.length)]}</span>`;
+        }
+
+        function checkAdmin() { currentUser === ADMIN_ID ? document.getElementById('adminPanel').classList.remove('hidden') : document.getElementById('adminPanel').classList.add('hidden'); }
+
+        function updateUI() {
+            const raidKey = document.getElementById('raidSelect').value; const raidInfo = bossData[raidKey];
+            document.getElementById('pageBg').style.backgroundColor = raidInfo.bgColor;
+            document.getElementById('bossAvatar').src = raidInfo.img;
+            if(document.getElementById('raidNotes')) document.getElementById('raidNotes').innerText = `最低人數: ${raidInfo.min} 人\n必要職業: ${raidInfo.req.join('、') || '無特別限制'}`;
+            document.getElementById('lootWishlist').innerHTML = `<option value="">(無)</option>` + raidInfo.loot.map(item => `<option value="${item}">${item}</option>`).join('');
+            updatePendingList();
+            document.getElementById('chatBox').innerHTML = db.chat.slice(1).reverse().map(c => `<div class="mb-1.5 leading-relaxed"><span class="text-cyan-300 font-bold">${c[1]}:</span> <span class="text-slate-300">${c[2]}</span></div>`).join('');
+            if (isReporting) cancelReportMode(); renderGrid();
+        }
+
+        function updatePendingList() {
+            const weekStr = document.getElementById('currentWeekRange').innerText; const raidKey = document.getElementById('raidSelect').value;
+            const reportedSchedules = db.schedules.filter(s => s[0] === weekStr);
+            const reportedNames = reportedSchedules.filter(s => {
+                if (s[2] === "OFF") return true; 
+                try { const parsed = JSON.parse(s[2]); return parsed[raidKey] !== undefined || parsed['Mon-18:00'] !== undefined; } catch(e) { return false; }
+            }).map(s => s[1]);
+            const pending = db.members.slice(1).map(m => m[0]).filter(n => !reportedNames.includes(n));
+            document.getElementById('pendingList').innerHTML = pending.length === 0 ? '<span class="text-xs text-green-400 font-bold tracking-widest drop-shadow"><i class="fas fa-check-circle mr-1"></i>全體回報完畢</span>' : pending.map(p => `<span class="bg-red-950/50 text-red-300 border border-red-900/50 px-2 py-1 rounded text-[10px] shadow-sm">${p}</span>`).join('');
+            
+            const wishBox = document.getElementById('wishlistBox'); let wishes = [];
+            reportedSchedules.forEach(s => {
+                if(s[2] !== "OFF") {
+                    try { const parsed = JSON.parse(s[2]); if(parsed[raidKey] && parsed[raidKey].__wish__) wishes.push({ name: s[1], item: parsed[raidKey].__wish__ }); } catch(e) {}
+                }
+            });
+            wishBox.innerHTML = wishes.length === 0 ? '<div class="text-[10px] text-slate-500 italic">目前無人許願</div>' : wishes.map(w => `<div class="text-[11px] bg-pink-900/20 border border-pink-500/20 px-2 py-1 rounded text-pink-200 mb-1 flex justify-between"><span>${w.name}</span> <span class="font-bold text-pink-400">${w.item}</span></div>`).join('');
+        }
+
+        function renderGrid() {
+            const body = document.getElementById('gridBody'); body.innerHTML = '';
+            const weekStr = document.getElementById('currentWeekRange').innerText; const raidKey = document.getElementById('raidSelect').value; const raidInfo = bossData[raidKey];
+            const weekSchedules = db.schedules.filter(s => s[0] === weekStr);
+            const finalized = db.finalized.find(f => f[0] === weekStr && f[1] === raidInfo.name);
+
+            for(let h=18; h<=22; h++) {
+                [0, 30].forEach(m => {
+                    const timeStr = `${h}:${m===0?'00':'30'}`; let row = `<tr><td class="text-[10px] font-cyber text-slate-400 font-bold pr-3 tracking-widest">${timeStr}</td>`;
+                    ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(day => {
+                        const cellId = `${day}-${timeStr}`;
+                        const peeps = weekSchedules.filter(s => {
+                            try { if (s[2] === "OFF") return false; const parsed = JSON.parse(s[2]); if (parsed[raidKey]) return !!parsed[raidKey][cellId]; return !!parsed[cellId]; } catch(e) { return false; }
+                        }).map(s => s[1]);
+
+                        let finalClass = (finalized && finalized[2] === cellId) ? 'cell-final' : (peeps.length === 0 ? 'cell-none' : (peeps.length >= raidInfo.min ? (raidInfo.req.every(req => peeps.some(pName => { const m = db.members.find(mem => mem[0] === pName); return m && m[1].includes(req); })) ? 'cell-perfect' : 'cell-lack') : 'cell-partial')) + " flex items-center justify-center text-[11px] font-black drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]";
+                        if (isReporting && selectedTimes[cellId]) finalClass += " cell-editing"; else if (!isReporting && adminSelection === cellId) finalClass += " cell-admin-selected";
+                        if (isReporting && !selectedTimes[cellId]) finalClass += " opacity-40";
+
+                        row += `<td><div id="${cellId}" data-names="${peeps.join(',')}" onclick="handleCellClick('${cellId}', '${timeStr}', '${day}')" class="cell ${finalClass}" title="人數: ${peeps.length}\n名單: ${peeps.join(', ')}">${peeps.length > 0 ? peeps.length : ''}</div></td>`;
+                    });
+                    row += `</tr>`; body.innerHTML += row;
+                });
+            }
+        }
+
+        function handleCellClick(id, time, day) {
+            playSound('click'); 
+            const cellEl = document.getElementById(id); const namesStr = cellEl ? cellEl.getAttribute('data-names') : ''; const namesArr = namesStr ? namesStr.split(',') : [];
+            if (isReporting) {
+                if (selectedTimes[id]) delete selectedTimes[id]; else selectedTimes[id] = true; renderGrid();
+            } else {
+                if (currentUser === ADMIN_ID) {
+                    adminSelection = id; document.getElementById('selectedTimeLabel').innerHTML = `已選取：${day} ${time}<br><span class="text-[11px] text-cyan-300 font-bold">名單: ${namesArr.join(', ') || '無'}</span>`;
+                    document.getElementById('btnFinalize').disabled = false; renderGrid();
+                } else {
+                    alert(namesArr.length > 0 ? `📅 ${day} ${time} (${namesArr.length}人)\n\n報名名單：\n${namesArr.join(', ')}` : `📅 ${day} ${time}\n\n目前尚無人回報此時段。\n📝 若要填寫空檔，請先點擊上方的「回報此副本時間」按鈕！`);
+                }
+            }
+        }
+
+        function startReportMode() {
+            playSound('click'); const raidKey = document.getElementById('raidSelect').value;
+            isReporting = true; document.getElementById('btnStartReport').classList.add('hidden'); document.getElementById('reportActionBar').classList.remove('translate-y-full');
+            selectedTimes = {}; globalMasterSchedule = {};
+            const existing = db.schedules.find(s => s[0] === document.getElementById('currentWeekRange').innerText && s[1] === currentUser);
+            if (existing && existing[2] !== "OFF") { try { let parsed = JSON.parse(existing[2]); if (parsed['Mon-18:00'] !== undefined) { globalMasterSchedule = { [raidKey]: parsed }; } else { globalMasterSchedule = parsed; } } catch(e) {} }
+            selectedTimes = globalMasterSchedule[raidKey] || {};
+            document.getElementById('lootWishlist').value = selectedTimes.__wish__ ? selectedTimes.__wish__ : "";
+            renderGrid();
+        }
+
+        function cancelReportMode() { playSound('click'); isReporting = false; document.getElementById('btnStartReport').classList.remove('hidden'); document.getElementById('reportActionBar').classList.add('translate-y-full'); renderGrid(); }
+
+        async function saveMySchedule(isOff) {
+            playSound('click'); const raidKey = document.getElementById('raidSelect').value; event.target.innerText = isOff ? "休假處理中..." : "送出中...";
+            let finalDataStr = "OFF";
+            if (!isOff) {
+                const wishVal = document.getElementById('lootWishlist').value; if(wishVal) selectedTimes.__wish__ = wishVal; else delete selectedTimes.__wish__;
+                globalMasterSchedule[raidKey] = selectedTimes; finalDataStr = JSON.stringify(globalMasterSchedule);
+            }
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ type: "SAVE_SCHEDULE", name: currentUser, week: document.getElementById('currentWeekRange').innerText, timeData: finalDataStr }) });
+            alert(isOff ? '🏖️ 本週休假已登記！' : `✅ 空檔回報成功！`); location.reload();
+        }
+
+        // ==========================================
+        // 核心修正：將出團名單打包送給 Apps Script 大腦！
+        // ==========================================
+        async function sendFinalize() {
+            if (!adminSelection) return;
+            playSound('success'); 
+            confetti({ particleCount: 150, spread: 100, origin: { y: 0.6 }, colors: ['#06b6d4', '#10b981', '#f59e0b', '#ec4899'] });
+
+            const raidKey = document.getElementById('raidSelect').value;
+            const raidName = bossData[raidKey].name;
+            document.getElementById('btnFinalize').innerText = "發布中...";
+            document.getElementById('btnFinalize').disabled = true;
+
+            const weekStr = document.getElementById('currentWeekRange').innerText;
+            const weekSchedules = db.schedules.filter(s => s[0] === weekStr);
+            
+            // 抓取被選中時段的出團名單
+            const participants = weekSchedules.filter(s => {
+                try { 
+                    if (s[2] === "OFF") return false;
+                    const parsed = JSON.parse(s[2]);
+                    if (parsed[raidKey]) return !!parsed[raidKey][adminSelection];
+                    return !!parsed[adminSelection]; 
+                } catch(e) { return false; }
+            }).map(s => s[1]);
+
+            // 發送給大腦
+            await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify({ 
+                    type: "FINALIZE", 
+                    week: weekStr, 
+                    raidName: raidName, 
+                    finalTime: adminSelection,
+                    participants: participants // 傳送名單給 LINE
+                })
+            });
+            
+            setTimeout(() => { location.reload(); }, 2000); 
+        }
+
+        function changeWeek(idx) {
+            playSound('click'); currentWeek = idx;
+            [0,1,2].forEach(i => document.getElementById(`w${i}`).className = (i === idx) ? "px-5 py-1.5 rounded-lg text-xs font-bold bg-cyan-600 text-white shadow-lg" : "px-5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition-colors");
+            adminSelection = null; document.getElementById('btnFinalize').disabled = true; document.getElementById('selectedTimeLabel').innerText = "尚未選取時段";
+            cancelReportMode(); updateDates(); updateUI(); 
+        }
+
+        function updateDates() {
+            const now = new Date(); const start = new Date(now.setDate(now.getDate() - (now.getDay()===0?6:now.getDay()-1)));
+            const d1 = new Date(start); d1.setDate(start.getDate() + (currentWeek*7)); const d2 = new Date(d1); d2.setDate(d1.getDate() + 6);
+            document.getElementById('currentWeekRange').innerText = `${d1.toLocaleDateString()} - ${d2.toLocaleDateString()}`;
+        }
+
+        async function sendChat() {
+            playSound('click'); const msg = document.getElementById('chatInput').value; if(!msg || !currentUser) return;
+            document.getElementById('chatInput').value = "發送中...";
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ type: "SEND_CHAT", name: currentUser, message: msg }) });
+            location.reload();
+        }
+
+        init();
+    </script>
+</body>
+</html>
