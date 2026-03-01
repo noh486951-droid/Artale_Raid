@@ -319,12 +319,14 @@
         function checkAdmin() { currentUser === ADMIN_ID ? document.getElementById('adminPanel').classList.remove('hidden') : document.getElementById('adminPanel').classList.add('hidden'); }
 
         // ★ 新增：渲染個人專屬儀表板
+        // ★ 修正版：渲染個人專屬儀表板 (修復重複時間 & 新增頻道顯示)
         function renderPersonalDashboard() {
             const dashEl = document.getElementById('personalDashboard');
             if (!dashEl) return;
             document.getElementById('vipName').innerText = currentUser;
             
             const weekStr = document.getElementById('currentWeekRange').innerText;
+            // 從資料庫抓出本週所有裁決紀錄
             const weekFinalized = db.finalized.filter(f => f[0] === weekStr);
             const myScheduleEntry = db.schedules.find(s => s[0] === weekStr && s[1] === currentUser);
             
@@ -333,13 +335,30 @@
             if (myScheduleEntry && myScheduleEntry[2] !== "OFF") {
                 try {
                     const parsed = JSON.parse(myScheduleEntry[2]);
-                    weekFinalized.forEach(f => {
+                    
+                    // 【修正 1】過濾重複的裁決紀錄：用 Set 紀錄已經處理過的「王+時間」，如果重複就不再加入
+                    const uniqueFinalized = [];
+                    const seen = new Set();
+                    // 用 reverse() 從最新的紀錄開始找，確保抓到的是團長「最後一次」發布的狀態
+                    [...weekFinalized].reverse().forEach(f => {
+                        const uniqueKey = f[1] + '-' + f[2]; // 例如: "殘暴炎魔 (6人)-Fri-20:30"
+                        if (!seen.has(uniqueKey)) {
+                            seen.add(uniqueKey);
+                            uniqueFinalized.push(f); // 存入不重複的清單
+                        }
+                    });
+
+                    // 重新把陣列反轉回來，照時間順序排列
+                    uniqueFinalized.reverse().forEach(f => {
                         const fRaidName = f[1];
                         const fTime = f[2];
+                        // 【修正 2】假設你的 Google Sheet 第五欄 (索引 4) 存的是頻道，如果沒有則預設顯示未定
+                        const fChannel = f[4] ? f[4] : "未定"; 
                         const rKey = Object.keys(bossData).find(k => bossData[k].name === fRaidName);
                         
+                        // 檢查該玩家是否有報名這個時段
                         if (rKey && parsed[rKey] && parsed[rKey][fTime]) {
-                            myMissions.push({ name: fRaidName, time: fTime, img: bossData[rKey].img });
+                            myMissions.push({ name: fRaidName, time: fTime, img: bossData[rKey].img, channel: fChannel });
                         }
                     });
                 } catch(e) {}
@@ -348,12 +367,16 @@
             if (myMissions.length === 0) {
                 dashEl.innerHTML = `<div class="bg-black/50 border border-slate-700/50 px-3 py-1.5 rounded-lg text-[11px] text-slate-400 font-bold">目前無出團任務，請持續待命 ☕</div>`;
             } else {
+                // 【修正 3】在 HTML 模板裡加上頻道的 UI 標籤
                 dashEl.innerHTML = myMissions.map(m => `
                     <div class="flex items-center gap-2 bg-black/60 border border-cyan-500/50 pr-3 rounded-lg shadow-[0_0_10px_rgba(6,182,212,0.2)]">
                         <img src="${m.img}" class="w-8 h-8 rounded-l-lg object-cover opacity-80">
                         <div class="py-1">
                             <div class="text-[9px] text-cyan-300 font-black tracking-wider leading-none mb-1">${m.name}</div>
-                            <div class="text-xs text-white font-cyber leading-none">${m.time}</div>
+                            <div class="text-xs text-white font-cyber leading-none flex items-center gap-1">
+                                ${m.time} 
+                                <span class="text-[9px] bg-indigo-600/50 text-indigo-100 px-1.5 py-0.5 rounded border border-indigo-400/50 tracking-widest ml-1">CH ${m.channel}</span>
+                            </div>
                         </div>
                     </div>
                 `).join('');
@@ -526,3 +549,4 @@
     </script>
 </body>
 </html>
+
