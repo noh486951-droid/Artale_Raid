@@ -81,6 +81,7 @@
                 </div>
             </div>
         </header>
+
         <div id="vipPassContainer" class="mb-6 glass-card p-4 rounded-2xl border-l-4 border-cyan-400 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-gradient-to-r from-cyan-950/40 to-transparent relative overflow-hidden">
             <div class="absolute -right-5 -top-5 opacity-10 transform rotate-12"><i class="fas fa-id-badge text-8xl"></i></div>
             <div class="relative z-10">
@@ -185,7 +186,6 @@
     </div>
 
     <script>
-        // ★★★ 你的專屬 API 網址已完美寫入 ★★★
         const API_URL = "https://script.google.com/macros/s/AKfycbx7JA9nHTpB1M9xRxSVy0U7_JEzVe8-Qoe1L4Nsj4IK1EcCiaoYx93p4w5oYQLDBVKYoA/exec";
         
         const ADMIN_ID = "Hero-咕咕嘎嘎"; 
@@ -318,6 +318,48 @@
 
         function checkAdmin() { currentUser === ADMIN_ID ? document.getElementById('adminPanel').classList.remove('hidden') : document.getElementById('adminPanel').classList.add('hidden'); }
 
+        // ★ 新增：渲染個人專屬儀表板
+        function renderPersonalDashboard() {
+            const dashEl = document.getElementById('personalDashboard');
+            if (!dashEl) return;
+            document.getElementById('vipName').innerText = currentUser;
+            
+            const weekStr = document.getElementById('currentWeekRange').innerText;
+            const weekFinalized = db.finalized.filter(f => f[0] === weekStr);
+            const myScheduleEntry = db.schedules.find(s => s[0] === weekStr && s[1] === currentUser);
+            
+            let myMissions = [];
+
+            if (myScheduleEntry && myScheduleEntry[2] !== "OFF") {
+                try {
+                    const parsed = JSON.parse(myScheduleEntry[2]);
+                    weekFinalized.forEach(f => {
+                        const fRaidName = f[1];
+                        const fTime = f[2];
+                        const rKey = Object.keys(bossData).find(k => bossData[k].name === fRaidName);
+                        
+                        if (rKey && parsed[rKey] && parsed[rKey][fTime]) {
+                            myMissions.push({ name: fRaidName, time: fTime, img: bossData[rKey].img });
+                        }
+                    });
+                } catch(e) {}
+            }
+
+            if (myMissions.length === 0) {
+                dashEl.innerHTML = `<div class="bg-black/50 border border-slate-700/50 px-3 py-1.5 rounded-lg text-[11px] text-slate-400 font-bold">目前無出團任務，請持續待命 ☕</div>`;
+            } else {
+                dashEl.innerHTML = myMissions.map(m => `
+                    <div class="flex items-center gap-2 bg-black/60 border border-cyan-500/50 pr-3 rounded-lg shadow-[0_0_10px_rgba(6,182,212,0.2)]">
+                        <img src="${m.img}" class="w-8 h-8 rounded-l-lg object-cover opacity-80">
+                        <div class="py-1">
+                            <div class="text-[9px] text-cyan-300 font-black tracking-wider leading-none mb-1">${m.name}</div>
+                            <div class="text-xs text-white font-cyber leading-none">${m.time}</div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
         function updateUI() {
             const raidKey = document.getElementById('raidSelect').value; const raidInfo = bossData[raidKey];
             document.getElementById('pageBg').style.backgroundColor = raidInfo.bgColor;
@@ -326,7 +368,11 @@
             document.getElementById('lootWishlist').innerHTML = `<option value="">(無)</option>` + raidInfo.loot.map(item => `<option value="${item}">${item}</option>`).join('');
             updatePendingList();
             document.getElementById('chatBox').innerHTML = db.chat.slice(1).reverse().map(c => `<div class="mb-1.5 leading-relaxed"><span class="text-cyan-300 font-bold">${c[1]}:</span> <span class="text-slate-300">${c[2]}</span></div>`).join('');
-            if (isReporting) cancelReportMode(); renderGrid();
+            if (isReporting) cancelReportMode(); 
+            
+            renderPersonalDashboard(); // ★ 加入執行渲染儀表板的指令
+            
+            renderGrid();
         }
 
         function updatePendingList() {
@@ -353,7 +399,6 @@
             const weekStr = document.getElementById('currentWeekRange').innerText; const raidKey = document.getElementById('raidSelect').value; const raidInfo = bossData[raidKey];
             const weekSchedules = db.schedules.filter(s => s[0] === weekStr);
             
-            // 【核心修正】將 find 改成 filter，抓出該副本本週「所有」定案的時間，並存成陣列
             const finalizedList = db.finalized.filter(f => f[0] === weekStr && f[1] === raidInfo.name).map(f => f[2]);
 
             for(let h=18; h<=22; h++) {
@@ -365,7 +410,6 @@
                             try { if (s[2] === "OFF") return false; const parsed = JSON.parse(s[2]); if (parsed[raidKey]) return !!parsed[raidKey][cellId]; return !!parsed[cellId]; } catch(e) { return false; }
                         }).map(s => s[1]);
 
-                        // 【核心修正】判斷這個格子是否包含在「所有定案時間(finalizedList)」裡面
                         let finalClass = (finalizedList.includes(cellId)) ? 'cell-final' : (peeps.length === 0 ? 'cell-none' : (peeps.length >= raidInfo.min ? (raidInfo.req.every(req => peeps.some(pName => { const m = db.members.find(mem => mem[0] === pName); return m && m[1].includes(req); })) ? 'cell-perfect' : 'cell-lack') : 'cell-partial')) + " flex items-center justify-center text-[11px] font-black drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]";
                         
                         if (isReporting && selectedTimes[cellId]) finalClass += " cell-editing"; else if (!isReporting && adminSelection === cellId) finalClass += " cell-admin-selected";
@@ -417,16 +461,12 @@
             alert(isOff ? '🏖️ 本週休假已登記！' : `✅ 空檔回報成功！`); location.reload();
         }
 
-        // ==========================================
-        // 核心修正：加入輸入頻道對話框，並打包送給大腦
-        // ==========================================
         async function sendFinalize() {
             if (!adminSelection) return;
 
-            // 【新增】跳出視窗詢問頻道
             let channelInput = prompt("💬 請輸入此次出團的集合頻道 (預設為 529)：", "529");
-            if (channelInput === null) return; // 如果團長按取消，就中斷定案
-            if (channelInput.trim() === "") channelInput = "529"; // 如果清空按確認，強制塞回 529
+            if (channelInput === null) return; 
+            if (channelInput.trim() === "") channelInput = "529"; 
 
             playSound('success'); 
             confetti({ particleCount: 150, spread: 100, origin: { y: 0.6 }, colors: ['#06b6d4', '#10b981', '#f59e0b', '#ec4899'] });
@@ -448,7 +488,6 @@
                 } catch(e) { return false; }
             }).map(s => s[1]);
 
-            // 發送給大腦
             await fetch(API_URL, {
                 method: 'POST',
                 body: JSON.stringify({ 
@@ -457,7 +496,7 @@
                     raidName: raidName, 
                     finalTime: adminSelection,
                     participants: participants,
-                    channel: channelInput // 【新增】傳送頻道給 LINE
+                    channel: channelInput 
                 })
             });
             
@@ -486,7 +525,4 @@
         init();
     </script>
 </body>
-
 </html>
-
-
