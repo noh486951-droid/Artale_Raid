@@ -511,6 +511,7 @@
                 } catch(e) { return false; }
             }).map(s => s[1]);
 
+            // 1. 儲存到 Google Sheets
             await fetch(API_URL, {
                 method: 'POST',
                 body: JSON.stringify({ 
@@ -523,6 +524,36 @@
                 })
             });
             
+            // 2. ★ 發送通知到 Discord Webhook ★
+            const webhookUrl = "https://discord.com/api/webhooks/1477530025464037669/ifr6fMutiGm8vNlVdXA5oD5llIKhTWmYapnLtO9n8yRf2BiQ1wF0fYgk2eP0IVcHoJ9K";
+            
+            const discordPayload = {
+                content: "📢 @everyone **指揮官已發布最新的 MISSION 鎖定！**", // 若不想 tag 所有人，可將 @everyone 刪除
+                embeds: [{
+                    title: `🎯 任務目標：${raidName}`,
+                    description: "特務們，請確認您的裝備並準時抵達指定頻道！",
+                    color: 43230, // 對應你網頁的青色 (Cyan)
+                    fields: [
+                        { name: "⏰ 集合時間", value: `**${adminSelection}**`, inline: true },
+                        { name: "📺 集合頻道", value: `**CH ${channelInput}**`, inline: true },
+                        { name: "👥 參戰特務名單", value: participants.length > 0 ? participants.map(p => `> 🕵️ ${p}`).join('\n') : "尚無人報名", inline: false }
+                    ],
+                    footer: { text: "Artale Raid Commander 系統自動發布" },
+                    timestamp: new Date().toISOString()
+                }]
+            };
+
+            try {
+                await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(discordPayload)
+                });
+            } catch (error) {
+                console.error("Discord 傳送失敗:", error);
+            }
+
+            // 3. 重新整理網頁
             setTimeout(() => { location.reload(); }, 2000); 
         }
         function changeWeek(idx) {
@@ -549,5 +580,6 @@
     </script>
 </body>
 </html>
+
 
 
