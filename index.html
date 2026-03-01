@@ -260,10 +260,14 @@
         const luckyColors = ["神秘黑", "熱血紅", "冰晶藍", "幸運綠", "閃耀黃", "純潔白", "暗黑紫", "低調灰"];
         const luckyItems = ["搞笑點裝武器", "狗鼻子 或 貓咪嘴唇", "浮誇的點裝帽子", "透明披風 (低調才是王道)", "把你的寵物收起來", "帶著會說話的寵物", "復古的紙袋頭套", "任何有翅膀的裝備", "殘暴炎魔頭盔", "閃亮的太陽眼鏡"];
 
-        // ★ 新增：各 BOSS 的戰術導覽內容
+        // ★ 新增：各 BOSS 的戰術導覽內容 (含攻略連結與殘暴炎魔完整戰術)
         const bossGuides = {
             papu_h: `
                 <div class="space-y-4 text-slate-200 leading-relaxed">
+                    <div class="flex justify-end mb-2">
+                        <a href="https://docs.google.com/document/d/1UrV2RrEJwLZJ8X5t88GXRuxKbbxp9vq6W2Qeu1nqzV0/edit?tab=t.0#heading=h.hzuhoaswo9i5" target="_blank" class="flex items-center gap-1 bg-cyan-900/40 hover:bg-cyan-800/60 border border-cyan-500/50 text-cyan-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"><i class="fas fa-external-link-alt"></i> 檢視完整原廠攻略文件</a>
+                    </div>
+                    
                     <div class="bg-red-950/40 border-l-4 border-red-500 p-3 rounded-r text-xs">
                         <span class="text-red-400 font-bold">⚠️ 前置警告：</span>必須至少通關過一次普通難度拉圖斯才能挑戰。
                     </div>
@@ -289,7 +293,47 @@
                     </ul>
                 </div>
             `,
-            zakum: `<div class="text-slate-400 text-center py-8">殘暴炎魔攻略建置中...</div>`,
+            zakum: `
+                <div class="space-y-4 text-slate-200 leading-relaxed">
+                    <div class="flex justify-end mb-2">
+                        <a href="https://docs.google.com/document/d/19iRUhl0Es049i5dgVkJlBAuDK3icESjuEqmAGj44cHs/edit?tab=t.0#heading=h.gjdgxs" target="_blank" class="flex items-center gap-1 bg-cyan-900/40 hover:bg-cyan-800/60 border border-cyan-500/50 text-cyan-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"><i class="fas fa-external-link-alt"></i> 檢視完整原廠攻略文件</a>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-3 text-xs mb-4">
+                        [cite_start]<div class="bg-black/40 p-2 rounded border border-white/5"><span class="text-cyan-400 font-bold">⏱️ 時間限制</span>：30 分鐘 [cite: 1]</div>
+                        [cite_start]<div class="bg-black/40 p-2 rounded border border-white/5"><span class="text-cyan-400 font-bold">💀 死亡次數</span>：10 次 [cite: 1]</div>
+                        [cite_start]<div class="bg-black/40 p-2 rounded border border-white/5"><span class="text-cyan-400 font-bold">👥 隊伍人數</span>：6 人 [cite: 1]</div>
+                        [cite_start]<div class="bg-black/40 p-2 rounded border border-white/5"><span class="text-cyan-400 font-bold">📅 每週限制</span>：17 次 [cite: 1]</div>
+                    </div>
+
+                    <h4 class="text-cyan-300 font-bold border-b border-white/10 pb-1 mt-4 text-sm">🛡️ 推薦隊伍組成</h4>
+                    [cite_start]<p class="text-xs">建議等級 135+ [cite: 1][cite_start]。1 <span class="text-pink-400">黑騎士</span> (火)、1 <span class="text-green-400">弓箭手</span> (眼)、1 <span class="text-yellow-400">主教</span> (解藥水封鎖)、1 <span class="text-blue-400">法師</span> (清魔精靈)、2 <span class="text-red-400">輸出</span> [cite: 1]。</p>
+
+                    <h4 class="text-cyan-300 font-bold border-b border-white/10 pb-1 mt-4 text-sm">⚠️ 核心 Debuff 機制</h4>
+                    <ul class="list-disc pl-5 text-xs space-y-2">
+                        [cite_start]<li><span class="text-red-400 font-bold">熱氣 (火)</span>：每層增傷 8% [cite: 1][cite_start]。<span class="text-red-600 font-bold">達 11 層時被特定攻擊擊中即死！</span> [cite: 1][cite_start]利用<span class="text-blue-300">冰坑</span>或<span class="text-blue-300">冰塊寶貝</span>重置 [cite: 1]。</li>
+                        [cite_start]<li><span class="text-orange-400 font-bold">武器侵蝕</span>：指數型降低傷害，建議控制在 6 層內 [cite: 1]。</li>
+                        [cite_start]<li><span class="text-purple-400 font-bold">護甲腐蝕</span>：增加受到傷害，<span class="text-purple-600 font-bold">達 6 層以上極易被秒殺</span> [cite: 1]。</li>
+                        [cite_start]<li><span class="text-emerald-400 font-bold">綠魔方 (Cube)</span>：站在中心可<span class="text-emerald-300">清除所有負面層數</span> (手部階段 2分半一次，本體 1分半一次) [cite: 1]。</li>
+                    </ul>
+
+                    <h4 class="text-cyan-300 font-bold border-b border-white/10 pb-1 mt-4 text-sm">🦾 八手階段打法</h4>
+                    <ul class="list-disc pl-5 text-xs space-y-2">
+                        [cite_start]<li><span class="text-orange-400 font-bold">擊殺順序</span>：優先 <span class="font-bold text-white">4、5、8</span> (高危險) ＞ <span class="font-bold text-white">2、3</span> ＞ <span class="font-bold text-white">1、6、7</span> (留著產冰火坑) [cite: 1]。</li>
+                        [cite_start]<li><span class="text-red-400 font-bold">紅藍印記 (手4/8)</span>：重疊站位躲避藍色印記；紅色印記無法躲避會疊加熱氣 [cite: 1]。</li>
+                        [cite_start]<li><span class="text-yellow-400 font-bold">落石墜擊 (手5)</span>：砸地後天花板掉落鐘乳石，疊加護甲與武器侵蝕 [cite: 1]。</li>
+                        [cite_start]<li><span class="text-purple-400 font-bold">異常狀態 (手2)</span>：會施加活屍化、藥水封鎖、消除增益(除雪花)，黑騎/法師需手動補保命Buff [cite: 1]。</li>
+                    </ul>
+
+                    <h4 class="text-cyan-300 font-bold border-b border-white/10 pb-1 mt-4 text-sm">👹 本體階段打法 (三階)</h4>
+                    <ul class="list-disc pl-5 text-xs space-y-2">
+                        [cite_start]<li><span class="text-purple-500 font-bold">紫色毒坑</span>：本體攻擊數次後，玩家腳下生成毒坑 [cite: 1][cite_start]。爆炸疊加 <span class="font-bold text-white">5層護甲與武器侵蝕 (極致命)</span> [cite: 1][cite_start]。請提前掛繩或跳躍躲避 [cite: 1]。</li>
+                        [cite_start]<li><span class="text-red-500 font-bold">圖騰火柱</span>：刻意被火柱擊中可獲 <span class="font-bold text-white">3層熱氣</span>，藉此增傷 (維持6-9層，嚴禁超過11層) [cite: 1]。</li>
+                        [cite_start]<li><span class="text-blue-400 font-bold">護甲腐蝕檢查</span>：全畫面攻擊，若玩家護甲腐蝕 <span class="font-bold text-white">> 7層</span> 則直接秒殺 [cite: 1]。</li>
+                        [cite_start]<li><span class="text-emerald-400 font-bold">魔精靈 (Boogie)</span>：2、3階出現 [cite: 1][cite_start]。會持續施加護甲腐蝕！<span class="font-bold text-white">法師必須以最快速度清場</span>，否則配合腐蝕檢查會瞬間團滅 [cite: 1]。</li>
+                    </ul>
+                </div>
+            `,
             papu_n: `<div class="text-slate-400 text-center py-8">普通拉圖斯攻略建置中...</div>`,
             horntail: `<div class="text-slate-400 text-center py-8">暗黑龍王攻略建置中...</div>`
         };
@@ -651,3 +695,4 @@
     </script>
 </body>
 </html>
+
