@@ -752,7 +752,7 @@
             const raidKey = document.getElementById('raidSelect').value; const raidInfo = bossData[raidKey];
             document.getElementById('pageBg').style.backgroundColor = raidInfo.bgColor;
             document.getElementById('bossAvatar').src = raidInfo.img;
-            document.getElementById('overlayToggleBtn').classList.remove('hidden');
+            document.getElementById('overlayToggleBtn').classList.toggle('hidden', raidKey !== 'papu_h');
             if (document.getElementById('raidNotes')) document.getElementById('raidNotes').innerText = `最低人數: ${raidInfo.min} 人\n必要職業: ${raidInfo.req.join('、') || '無特別限制'}`;
             document.getElementById('lootWishlist').innerHTML = `<option value="">(無)</option>` + raidInfo.loot.map(item => `<option value="${item}">${item}</option>`).join('');
             updatePendingList();
