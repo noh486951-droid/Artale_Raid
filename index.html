@@ -226,6 +226,9 @@
                 target="_blank"
                 class="flex items-center gap-2 bg-black/40 hover:bg-yellow-900/40 border border-white/10 hover:border-yellow-500/50 text-slate-300 hover:text-yellow-300 px-4 py-2 rounded-xl text-xs font-bold transition-all backdrop-blur-sm shadow-sm"><i
                     class="fas fa-book-open text-yellow-400"></i> 全職業技能攻略</a>
+            <button onclick="openLeaderboard()"
+                class="flex items-center gap-2 bg-black/40 hover:bg-amber-900/40 border border-white/10 hover:border-amber-500/50 text-slate-300 hover:text-amber-300 px-4 py-2 rounded-xl text-xs font-bold transition-all backdrop-blur-sm shadow-sm"><i
+                    class="fas fa-trophy text-amber-500"></i> 特務戰績排行榜</button>
             <button onclick="openGuide()"
                 class="flex items-center gap-2 bg-black/40 hover:bg-emerald-900/40 border border-white/10 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-300 px-4 py-2 rounded-xl text-xs font-bold transition-all backdrop-blur-sm shadow-sm"><i
                     class="fas fa-shield-alt text-emerald-400"></i> 檢視當前王團戰術導覽</button>
@@ -297,9 +300,11 @@
                     <div class="p-3 bg-black/50 rounded-xl border border-indigo-500/30 text-center shadow-inner">
                         <p class="text-[10px] text-slate-300 mb-2">請在右側點擊綠色格子後定案</p>
                         <p id="selectedTimeLabel" class="text-sm font-black text-white mb-3 drop-shadow-md">尚未選取時段</p>
-                        <button id="btnFinalize" disabled onclick="sendFinalize()"
-                            class="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white px-4 py-2 rounded-lg text-xs font-black transition-all shadow-lg shadow-indigo-900/50">發布
+                        <button id="btnFinalize" disabled onclick="openChannelModal()"
+                            class="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white px-4 py-2 rounded-lg text-xs font-black transition-all shadow-lg shadow-indigo-900/50 mb-2">發布
                             MISSION 鎖定</button>
+                        <button id="btnDropDistribute" onclick="openDropDistributeModal()" disabled
+                            class="w-full bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 disabled:text-slate-500 text-white px-4 py-2 rounded-lg text-xs font-black transition-all shadow-lg shadow-amber-900/50">💸 掉落物結算分配</button>
                     </div>
                     <div class="mt-4 p-3 bg-black/50 rounded-xl border border-indigo-500/30">
                         <p class="text-[10px] font-black text-indigo-300 uppercase tracking-widest mb-2"><i class="fab fa-discord mr-1"></i>Discord Webhook 設定</p>
@@ -398,6 +403,88 @@
                         class="fas fa-times text-xl"></i></button>
             </div>
             <div class="p-6 overflow-y-auto custom-scrollbar text-sm space-y-4" id="guideBody">
+            </div>
+        </div>
+    </div>
+
+    </div>
+
+    <!-- 頻道發布設定彈出視窗 -->
+    <div id="channelModal"
+        class="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+        <div class="glass-card w-full max-w-sm flex flex-col rounded-3xl border border-indigo-500/50 shadow-[0_0_40px_rgba(99,102,241,0.3)] overflow-hidden transform scale-95 transition-transform duration-300"
+            id="channelModalContent">
+            <div class="bg-indigo-950/50 p-4 border-b border-indigo-500/30">
+                <h3 class="text-lg font-black text-indigo-400 font-cyber tracking-widest italic text-center"><i
+                        class="fas fa-broadcast-tower mr-2"></i>MISSION CHANNEL</h3>
+            </div>
+            <div class="p-6">
+                <p class="text-xs text-slate-300 mb-2 font-bold">請輸入此次出團的集合頻道：</p>
+                <input type="text" id="finalChannelInput" value="529"
+                    class="w-full bg-slate-900 border border-indigo-500/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-400 text-white font-bold text-center mb-4">
+                <div class="flex gap-3">
+                    <button onclick="closeChannelModal()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-xl text-xs font-black transition-all">取消</button>
+                    <button onclick="executeFinalize()" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-black transition-all shadow-[0_0_15px_rgba(99,102,241,0.4)]">確認發布</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 戰績排行榜彈出視窗 -->
+    <div id="leaderboardModal"
+        class="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-sm hidden flex flex-col items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+        <div class="glass-card w-full max-w-4xl max-h-[85vh] flex flex-col rounded-3xl border border-amber-500/50 shadow-[0_0_40px_rgba(245,158,11,0.3)] overflow-hidden transform scale-95 transition-transform duration-300"
+            id="leaderboardModalContent">
+            <div class="bg-amber-950/50 p-4 border-b border-amber-500/30 flex justify-between items-center">
+                <h3 class="text-lg font-black text-amber-400 font-cyber tracking-widest italic drop-shadow-md"><i
+                        class="fas fa-trophy mr-2"></i>AGENT LEADERBOARD</h3>
+                <button onclick="closeLeaderboard()" class="text-slate-400 hover:text-red-400 transition-colors"><i
+                        class="fas fa-times text-xl"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto custom-scrollbar flex-1 relative" id="leaderboardBody">
+                <table class="w-full text-left border-collapse min-w-max">
+                    <thead class="bg-amber-900/30 text-amber-300 text-[10px] uppercase font-bold sticky top-0 backdrop-blur-sm">
+                        <tr>
+                            <th class="p-3 rounded-tl-lg">特務代號</th>
+                            <th class="p-3 text-center">總參戰次數</th>
+                            <th class="p-3 text-center border-l border-amber-500/20">總獲得掉落物</th>
+                            <th class="p-3 text-center">幸運掉落率</th>
+                            <th class="p-3 rounded-tr-lg border-l border-amber-500/20 w-1/2">歷年掉落明細</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboardTableBody" class="text-xs text-slate-300">
+                        <!-- 內容動態生成 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 掉落物分配彈出視窗 -->
+    <div id="dropModal"
+        class="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+        <div class="glass-card w-full max-w-lg flex flex-col rounded-3xl border border-emerald-500/50 shadow-[0_0_40px_rgba(16,185,129,0.3)] overflow-hidden transform scale-95 transition-transform duration-300"
+            id="dropModalContent">
+            <div class="bg-emerald-950/50 p-4 border-b border-emerald-500/30 flex justify-between items-center">
+                <h3 class="text-lg font-black text-emerald-400 font-cyber tracking-widest italic"><i
+                        class="fas fa-gem mr-2"></i>LOOT DISTRIBUTION</h3>
+                <button onclick="closeDropModal()" class="text-slate-400 hover:text-red-400 transition-colors"><i
+                        class="fas fa-times text-xl"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto custom-scrollbar max-h-[60vh]">
+                <div class="mb-4 bg-black/40 p-3 rounded-xl border border-emerald-500/20">
+                    <p class="text-[10px] text-emerald-300 font-bold mb-1">任務資訊</p>
+                    <div id="dropMissionInfo" class="text-sm text-white font-cyber italic"></div>
+                </div>
+                
+                <div id="dropParticipantsForm" class="space-y-3">
+                    <!-- 動態生成參與者表單 -->
+                </div>
+
+                <div class="mt-6 flex gap-3">
+                    <button onclick="closeDropModal()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-xl text-xs font-black transition-all">取消</button>
+                    <button onclick="submitDrops()" id="btnSubmitDrops" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-black transition-all shadow-[0_0_15px_rgba(16,185,129,0.4)]">確認送出分配表</button>
+                </div>
             </div>
         </div>
     </div>
@@ -627,7 +714,10 @@
 
         async function fetchData() {
             try {
-                const res = await fetch(API_URL); db = await res.json(); setupLoginScreen();
+                const res = await fetch(API_URL); 
+                db = await res.json(); 
+                if(!db.drops) db.drops = []; // Fallback 若尚未提供 Drops 工作表
+                setupLoginScreen();
             } catch (e) { document.getElementById('loginLoading').innerHTML = '<i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>連線失敗，請檢查 API 網址'; }
         }
 
@@ -818,7 +908,9 @@
             } else {
                 if (currentUser === ADMIN_ID) {
                     adminSelection = id; document.getElementById('selectedTimeLabel').innerHTML = `已選取：${day} ${time}<br><span class="text-[11px] text-cyan-300 font-bold">名單: ${namesArr.join(', ') || '無'}</span>`;
-                    document.getElementById('btnFinalize').disabled = false; renderGrid();
+                    document.getElementById('btnFinalize').disabled = false; 
+                    if (document.getElementById('btnDropDistribute')) document.getElementById('btnDropDistribute').disabled = false;
+                    renderGrid();
                 } else {
                     alert(namesArr.length > 0 ? `📅 ${day} ${time} (${namesArr.length}人)\n\n報名名單：\n${namesArr.join(', ')}` : `📅 ${day} ${time}\n\n目前尚無人回報此時段。\n📝 若要填寫空檔，請先點擊上方的「回報此副本時間」按鈕！`);
                 }
@@ -860,12 +952,28 @@
             alert(isOff ? '🏖️ 本週休假已登記！' : `✅ 空檔回報成功！`); location.reload();
         }
 
-        async function sendFinalize() {
+        function openChannelModal() {
             if (!adminSelection) return;
+            playSound('click');
+            const modal = document.getElementById('channelModal');
+            const content = document.getElementById('channelModalContent');
+            modal.classList.remove('hidden');
+            setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10);
+        }
 
-            let channelInput = prompt("💬 請輸入此次出團的集合頻道 (預設為 529)：", "529");
-            if (channelInput === null) return;
-            if (channelInput.trim() === "") channelInput = "529";
+        function closeChannelModal() {
+            playSound('click');
+            const modal = document.getElementById('channelModal');
+            const content = document.getElementById('channelModalContent');
+            modal.classList.add('opacity-0'); content.classList.add('scale-95');
+            setTimeout(() => { modal.classList.add('hidden'); }, 300);
+        }
+
+        async function executeFinalize() {
+            let channelInput = document.getElementById('finalChannelInput').value.trim();
+            if (channelInput === "") channelInput = "529";
+            
+            closeChannelModal();
 
             playSound('success');
             confetti({ particleCount: 150, spread: 100, origin: { y: 0.6 }, colors: ['#06b6d4', '#10b981', '#f59e0b', '#ec4899'] });
@@ -1034,6 +1142,168 @@
             setTimeout(() => {
                 modal.classList.add('hidden');
             }, 300);
+        }
+
+        let isSavingDrop = false;
+
+        function openLeaderboard() {
+            playSound('click');
+            const modal = document.getElementById('leaderboardModal');
+            const content = document.getElementById('leaderboardModalContent');
+            renderLeaderboard();
+            modal.classList.remove('hidden');
+            setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10);
+        }
+
+        function closeLeaderboard() {
+            playSound('click');
+            const modal = document.getElementById('leaderboardModal');
+            const content = document.getElementById('leaderboardModalContent');
+            modal.classList.add('opacity-0'); content.classList.add('scale-95');
+            setTimeout(() => { modal.classList.add('hidden'); }, 300);
+        }
+
+        function renderLeaderboard() {
+            const tableBody = document.getElementById('leaderboardTableBody');
+            if(!db.drops) db.drops = [];
+            
+            const stats = {};
+            db.members.slice(1).forEach(m => {
+                stats[m[0]] = { name: m[0], runs: 0, dropCount: 0, items: [] };
+            });
+
+            db.finalized.slice(1).forEach(f => {
+                const participantsStr = f[3] || "";
+                if(participantsStr) {
+                    const pList = participantsStr.split(",");
+                    pList.forEach(p => {
+                        if(stats[p]) stats[p].runs++;
+                    });
+                }
+            });
+
+            db.drops.slice(1).forEach(d => {
+                const playerName = d[2];
+                const item = d[3];
+                if(stats[playerName] && item && item !== "無") {
+                    stats[playerName].dropCount++;
+                    stats[playerName].items.push(item);
+                }
+            });
+
+            const sortedStats = Object.values(stats).sort((a,b) => b.dropCount - a.dropCount || b.runs - a.runs);
+
+            tableBody.innerHTML = sortedStats.map(s => {
+                const rate = s.runs > 0 ? ((s.dropCount / s.runs) * 100).toFixed(1) + "%" : "0%";
+                return `
+                    <tr class="border-t border-amber-500/10 hover:bg-white/5 transition-colors">
+                        <td class="p-3 font-bold text-amber-300">🕵️ ${s.name}</td>
+                        <td class="p-3 text-center text-white text-lg font-cyber shadow-sm">${s.runs}</td>
+                        <td class="p-3 text-center border-l border-amber-500/10"><span class="bg-amber-900/40 text-amber-400 px-3 py-1 rounded-lg font-black text-lg">${s.dropCount}</span></td>
+                        <td class="p-3 text-center font-cyber text-lg ${s.dropCount > 0 ? 'text-emerald-400 drop-shadow' : 'text-slate-500'}">${rate}</td>
+                        <td class="p-3 border-l border-amber-500/10 text-[10px] text-slate-400">
+                            ${s.items.length > 0 ? s.items.map(i => `<span class="bg-pink-900/30 border border-pink-500/20 text-pink-300 px-2 py-1 rounded-md mr-1 inline-block mb-1 shadow-sm">${i}</span>`).join('') : '<span class="italic opacity-50">尚未獲得任何傳奇裝備</span>'}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        let currentDropParticipants = [];
+
+        function openDropDistributeModal() {
+            if (!adminSelection) return;
+            playSound('click');
+            
+            const raidKey = document.getElementById('raidSelect').value;
+            const raidInfo = bossData[raidKey];
+            const weekStr = document.getElementById('currentWeekRange').innerText;
+            
+            const weekSchedules = db.schedules.filter(s => s[0] === weekStr);
+            currentDropParticipants = weekSchedules.filter(s => {
+                try {
+                    if (s[2] === "OFF") return false;
+                    const parsed = JSON.parse(s[2]);
+                    if (parsed[raidKey]) return !!parsed[raidKey][adminSelection];
+                    return !!parsed[adminSelection];
+                } catch (e) { return false; }
+            }).map(s => s[1]);
+
+            document.getElementById('dropMissionInfo').innerHTML = `🎯 ${raidInfo.name}<br>⏰ ${weekStr} ${adminSelection}`;
+            
+            const formContainer = document.getElementById('dropParticipantsForm');
+            if(currentDropParticipants.length === 0) {
+                formContainer.innerHTML = '<div class="text-center text-slate-400 text-xs py-4">此時段無人報名參戰</div>';
+                document.getElementById('btnSubmitDrops').disabled = true;
+            } else {
+                document.getElementById('btnSubmitDrops').disabled = false;
+                const dropOptions = `<option value="無">沒有獲得分配</option>` + raidInfo.loot.map(item => `<option value="${item}">${item}</option>`).join('');
+                
+                formContainer.innerHTML = currentDropParticipants.map((p, idx) => `
+                    <div class="flex items-center justify-between bg-black/40 border border-emerald-500/30 p-2.5 rounded-xl">
+                        <div class="text-emerald-300 text-xs font-bold w-1/3 truncate"><i class="fas fa-user-ninja mr-1"></i>${p}</div>
+                        <select id="drop_select_${idx}" class="w-2/3 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-emerald-400 font-bold">
+                            ${dropOptions}
+                        </select>
+                    </div>
+                `).join('');
+            }
+
+            const modal = document.getElementById('dropModal');
+            const content = document.getElementById('dropModalContent');
+            modal.classList.remove('hidden');
+            setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10);
+        }
+
+        function closeDropModal() {
+            if(isSavingDrop) return;
+            playSound('click');
+            const modal = document.getElementById('dropModal');
+            const content = document.getElementById('dropModalContent');
+            modal.classList.add('opacity-0'); content.classList.add('scale-95');
+            setTimeout(() => { modal.classList.add('hidden'); }, 300);
+        }
+
+        async function submitDrops() {
+            if(isSavingDrop) return;
+            isSavingDrop = true;
+            playSound('click');
+            document.getElementById('btnSubmitDrops').innerText = "上傳戰績中...";
+            document.getElementById('btnSubmitDrops').classList.add('animate-pulse');
+            
+            const raidKey = document.getElementById('raidSelect').value;
+            const raidName = bossData[raidKey].name;
+
+            const records = [];
+            currentDropParticipants.forEach((p, idx) => {
+                const item = document.getElementById(`drop_select_${idx}`).value;
+                if(item !== "無") {
+                    records.push({ player: p, item: item, boss: raidName });
+                }
+            });
+
+            if(records.length > 0) {
+                try {
+                    await fetch(API_URL, { 
+                        method: 'POST', 
+                        body: JSON.stringify({ 
+                            type: "RECORD_DROP", 
+                            records: records
+                        }) 
+                    });
+                    alert('🏆 掉落物結算完畢！系統已記錄至戰績表！');
+                } catch(e) {
+                    alert('連線失敗，請檢查網路狀態');
+                }
+            } else {
+                alert('🏆 紀錄完成：此次任務全隊大爆死，毫無收穫！');
+            }
+            
+            isSavingDrop = false;
+            document.getElementById('btnSubmitDrops').innerText = "確認送出分配表";
+            document.getElementById('btnSubmitDrops').classList.remove('animate-pulse');
+            closeDropModal();
+            location.reload();
         }
 
         // ===== 參考圖浮層功能 =====
