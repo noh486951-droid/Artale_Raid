@@ -953,31 +953,30 @@
             }
             const weekStr = document.getElementById('currentWeekRange').innerText;
             
-            try {
-                await fetch(API_URL, { 
-                    method: 'POST', 
-                    mode: 'no-cors',
-                    body: JSON.stringify({ type: "SAVE_SCHEDULE", name: currentUser, week: weekStr, timeData: finalDataStr }) 
-                });
-            } catch(e) {
-                console.error("Post data failed:", e);
-                alert('連線異常，請稍後再試。');
-                btn.innerText = originalText;
-                btn.disabled = false;
-                return;
+            // Optimistic UI update for zero-latency response
+            const existingIdx = db.schedules.findIndex(s => s[0] === weekStr && s[1] === currentUser);
+            if (existingIdx !== -1) {
+                db.schedules[existingIdx][2] = finalDataStr;
+            } else {
+                db.schedules.push([weekStr, currentUser, finalDataStr]);
             }
 
-            try {
-                const freshRes = await fetch(API_URL);
-                const freshDb = await freshRes.json();
-                db = freshDb;
-                await checkAndNotifyAllReported(raidKey, weekStr);
-            } catch(e) { console.error("全員確認通知發生錯誤:", e); }
-
-            alert(isOff ? '🏖️ 本週休假已登記！' : `✅ 空檔回報成功！`); 
             btn.innerText = "確認並送出";
             btn.disabled = false;
             updateUI();
+
+            setTimeout(() => {
+                alert(isOff ? '🏖️ 本週休假已登記！' : `✅ 空檔回報成功！`);
+            }, 50);
+
+            // Background sync (doesn't block user flow)
+            fetch(API_URL, { 
+                method: 'POST', 
+                mode: 'no-cors',
+                body: JSON.stringify({ type: "SAVE_SCHEDULE", name: currentUser, week: weekStr, timeData: finalDataStr }) 
+            }).then(() => {
+                checkAndNotifyAllReported(raidKey, weekStr);
+            }).catch(e => console.error("Post data failed:", e));
         }
 
         function openChannelModal() {
