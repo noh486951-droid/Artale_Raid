@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Artale Raid Commander Pro V1.4.0</title>
+    <title>Artale Raid Commander Pro V1.5.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -137,7 +137,7 @@
             </div>
             <h1 class="text-2xl font-black italic tracking-tighter text-cyan-400 font-cyber mb-1">ARTALE</h1>
             <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Raid Commander</h2>
-            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.4.0</div>
+            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.5.0</div>
             <div id="loginLoading" class="text-cyan-500 text-sm font-bold animate-pulse"><i
                     class="fas fa-circle-notch fa-spin mr-2"></i>連線至資料庫中...</div>
             <div id="loginForm" class="hidden space-y-4">
@@ -172,7 +172,7 @@
                 <div>
                     <h1
                         class="text-3xl font-black italic tracking-tighter text-cyan-400 font-cyber drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
-                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.4.0</span></h1>
+                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.5.0</span></h1>
                     <div id="currentWeekRange"
                         class="text-[10px] text-cyan-100 font-cyber uppercase tracking-widest mt-1 opacity-70">System
                         Online</div>
@@ -710,7 +710,7 @@
             }
         }
 
-        async function init() { console.log("Artale Raid Commander Pro V1.4.0 Loaded"); updateDates(); await fetchData(); }
+        async function init() { console.log("Artale Raid Commander Pro V1.5.0 Loaded"); updateDates(); await fetchData(); }
 
         async function fetchData() {
             try {
@@ -727,7 +727,13 @@
             const select = document.getElementById('loginSelect');
             select.innerHTML += db.members.slice(1).map(m => `<option value="${m[0]}">${m[0]} (${m[1]})</option>`).join('');
             const savedId = localStorage.getItem('artale_raid_id');
-            if (savedId && db.members.find(m => m[0] === savedId)) { select.value = savedId; handleLoginChange(); }
+            if (savedId && db.members.find(m => m[0] === savedId)) { 
+                select.value = savedId; 
+                handleLoginChange(); 
+                if (savedId !== ADMIN_ID) {
+                    setTimeout(() => doLogin(), 100);
+                }
+            }
         }
 
         function handleLoginChange() {
@@ -931,25 +937,47 @@
         function cancelReportMode() { playSound('click'); isReporting = false; document.getElementById('btnStartReport').classList.remove('hidden'); document.getElementById('reportActionBar').classList.add('translate-y-full'); renderGrid(); }
 
         async function saveMySchedule(isOff) {
-            playSound('click'); const raidKey = document.getElementById('raidSelect').value; event.target.innerText = isOff ? "休假處理中..." : "送出中...";
+            playSound('click'); 
+            const raidKey = document.getElementById('raidSelect').value; 
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = isOff ? "休假處理中..." : "送出中...";
+            btn.disabled = true;
+
             let finalDataStr = "OFF";
             if (!isOff) {
-                const wishVal = document.getElementById('lootWishlist').value; if (wishVal) selectedTimes.__wish__ = wishVal; else delete selectedTimes.__wish__;
-                globalMasterSchedule[raidKey] = selectedTimes; finalDataStr = JSON.stringify(globalMasterSchedule);
+                const wishVal = document.getElementById('lootWishlist').value; 
+                if (wishVal) selectedTimes.__wish__ = wishVal; else delete selectedTimes.__wish__;
+                globalMasterSchedule[raidKey] = selectedTimes; 
+                finalDataStr = JSON.stringify(globalMasterSchedule);
             }
             const weekStr = document.getElementById('currentWeekRange').innerText;
-            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ type: "SAVE_SCHEDULE", name: currentUser, week: weekStr, timeData: finalDataStr }) });
+            
+            try {
+                await fetch(API_URL, { 
+                    method: 'POST', 
+                    mode: 'no-cors',
+                    body: JSON.stringify({ type: "SAVE_SCHEDULE", name: currentUser, week: weekStr, timeData: finalDataStr }) 
+                });
+            } catch(e) {
+                console.error("Post data failed:", e);
+                alert('連線異常，請稍後再試。');
+                btn.innerText = originalText;
+                btn.disabled = false;
+                return;
+            }
 
             try {
                 const freshRes = await fetch(API_URL);
                 const freshDb = await freshRes.json();
-                const tempDb = db;
                 db = freshDb;
                 await checkAndNotifyAllReported(raidKey, weekStr);
-                db = tempDb;
             } catch(e) { console.error("全員確認通知發生錯誤:", e); }
 
-            alert(isOff ? '🏖️ 本週休假已登記！' : `✅ 空檔回報成功！`); location.reload();
+            alert(isOff ? '🏖️ 本週休假已登記！' : `✅ 空檔回報成功！`); 
+            btn.innerText = "確認並送出";
+            btn.disabled = false;
+            updateUI();
         }
 
         function openChannelModal() {
@@ -997,6 +1025,7 @@
 
             await fetch(API_URL, {
                 method: 'POST',
+                mode: 'no-cors',
                 body: JSON.stringify({
                     type: "FINALIZE",
                     week: weekStr,
@@ -1112,7 +1141,7 @@
         async function sendChat() {
             playSound('click'); const msg = document.getElementById('chatInput').value; if (!msg || !currentUser) return;
             document.getElementById('chatInput').value = "發送中...";
-            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ type: "SEND_CHAT", name: currentUser, message: msg }) });
+            await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ type: "SEND_CHAT", name: currentUser, message: msg }) });
             location.reload();
         }
 
@@ -1286,6 +1315,7 @@
                 try {
                     await fetch(API_URL, { 
                         method: 'POST', 
+                        mode: 'no-cors',
                         body: JSON.stringify({ 
                             type: "RECORD_DROP", 
                             records: records
