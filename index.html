@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Artale Raid Commander Pro V1.5.0</title>
+    <title>Artale Raid Commander Pro V1.5.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -137,7 +137,7 @@
             </div>
             <h1 class="text-2xl font-black italic tracking-tighter text-cyan-400 font-cyber mb-1">ARTALE</h1>
             <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Raid Commander</h2>
-            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.5.0</div>
+            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.5.1</div>
             <div id="loginLoading" class="text-cyan-500 text-sm font-bold animate-pulse"><i
                     class="fas fa-circle-notch fa-spin mr-2"></i>連線至資料庫中...</div>
             <div id="loginForm" class="hidden space-y-4">
@@ -172,7 +172,7 @@
                 <div>
                     <h1
                         class="text-3xl font-black italic tracking-tighter text-cyan-400 font-cyber drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
-                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.5.0</span></h1>
+                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.5.1</span></h1>
                     <div id="currentWeekRange"
                         class="text-[10px] text-cyan-100 font-cyber uppercase tracking-widest mt-1 opacity-70">System
                         Online</div>
@@ -710,7 +710,7 @@
             }
         }
 
-        async function init() { console.log("Artale Raid Commander Pro V1.5.0 Loaded"); updateDates(); await fetchData(); }
+        async function init() { console.log("Artale Raid Commander Pro V1.5.1 Loaded"); updateDates(); await fetchData(); }
 
         async function fetchData() {
             try {
@@ -864,7 +864,7 @@
             const reportedSchedules = db.schedules.filter(s => s[0] === weekStr);
             const reportedNames = reportedSchedules.filter(s => {
                 if (s[2] === "OFF") return true;
-                try { const parsed = JSON.parse(s[2]); return parsed[raidKey] !== undefined || parsed['Mon-18:00'] !== undefined; } catch (e) { return false; }
+                try { const parsed = JSON.parse(s[2]); const isNewFormat = Object.keys(bossData).some(k => parsed[k] !== undefined); return parsed[raidKey] !== undefined || !isNewFormat; } catch (e) { return false; }
             }).map(s => s[1]);
             const pending = db.members.slice(1).map(m => m[0]).filter(n => !reportedNames.includes(n));
             document.getElementById('pendingList').innerHTML = pending.length === 0 ? '<span class="text-xs text-green-400 font-bold tracking-widest drop-shadow"><i class="fas fa-check-circle mr-1"></i>全體回報完畢</span>' : pending.map(p => `<span class="bg-red-950/50 text-red-300 border border-red-900/50 px-2 py-1 rounded text-[10px] shadow-sm">${p}</span>`).join('');
@@ -928,7 +928,7 @@
             isReporting = true; document.getElementById('btnStartReport').classList.add('hidden'); document.getElementById('reportActionBar').classList.remove('translate-y-full');
             selectedTimes = {}; globalMasterSchedule = {};
             const existing = db.schedules.find(s => s[0] === document.getElementById('currentWeekRange').innerText && s[1] === currentUser);
-            if (existing && existing[2] !== "OFF") { try { let parsed = JSON.parse(existing[2]); if (parsed['Mon-18:00'] !== undefined) { globalMasterSchedule = { [raidKey]: parsed }; } else { globalMasterSchedule = parsed; } } catch (e) { } }
+            if (existing && existing[2] !== "OFF") { try { let parsed = JSON.parse(existing[2]); const isNewFormat = Object.keys(bossData).some(k => parsed[k] !== undefined); if (!isNewFormat) { globalMasterSchedule = { [raidKey]: parsed }; } else { globalMasterSchedule = parsed; } } catch (e) { } }
             selectedTimes = globalMasterSchedule[raidKey] || {};
             document.getElementById('lootWishlist').value = selectedTimes.__wish__ ? selectedTimes.__wish__ : "";
             renderGrid();
@@ -961,6 +961,17 @@
                 db.schedules.push([weekStr, currentUser, finalDataStr]);
             }
 
+            try {
+                await fetch(API_URL, { 
+                    method: 'POST', 
+                    mode: 'no-cors',
+                    body: JSON.stringify({ type: "SAVE_SCHEDULE", name: currentUser, week: weekStr, timeData: finalDataStr }) 
+                });
+                await checkAndNotifyAllReported(raidKey, weekStr);
+            } catch(e) {
+                console.error("Post data failed:", e);
+            }
+
             btn.innerText = "確認並送出";
             btn.disabled = false;
             updateUI();
@@ -968,15 +979,6 @@
             setTimeout(() => {
                 alert(isOff ? '🏖️ 本週休假已登記！' : `✅ 空檔回報成功！`);
             }, 50);
-
-            // Background sync (doesn't block user flow)
-            fetch(API_URL, { 
-                method: 'POST', 
-                mode: 'no-cors',
-                body: JSON.stringify({ type: "SAVE_SCHEDULE", name: currentUser, week: weekStr, timeData: finalDataStr }) 
-            }).then(() => {
-                checkAndNotifyAllReported(raidKey, weekStr);
-            }).catch(e => console.error("Post data failed:", e));
         }
 
         function openChannelModal() {
