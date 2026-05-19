@@ -714,7 +714,7 @@
 
         async function fetchData() {
             try {
-                const res = await fetch(API_URL); 
+                const res = await fetch(API_URL + "?t=" + new Date().getTime()); 
                 db = await res.json(); 
                 if(!db.drops) db.drops = []; // Fallback 若尚未提供 Drops 工作表
                 setupLoginScreen();
@@ -1133,10 +1133,14 @@
             cancelReportMode(); updateDates(); updateUI();
         }
 
+        function formatDate(d) {
+            return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+        }
+
         function updateDates() {
             const now = new Date(); const start = new Date(now.setDate(now.getDate() - (now.getDay() === 0 ? 6 : now.getDay() - 1)));
             const d1 = new Date(start); d1.setDate(start.getDate() + (currentWeek * 7)); const d2 = new Date(d1); d2.setDate(d1.getDate() + 6);
-            document.getElementById('currentWeekRange').innerText = `${d1.toLocaleDateString()} - ${d2.toLocaleDateString()}`;
+            document.getElementById('currentWeekRange').innerText = `${formatDate(d1)} - ${formatDate(d2)}`;
         }
 
         async function sendChat() {
