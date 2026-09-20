@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Artale Raid Commander Pro V1.5.2</title>
+    <title>Artale Raid Commander Pro V1.5.3</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -137,7 +137,7 @@
             </div>
             <h1 class="text-2xl font-black italic tracking-tighter text-cyan-400 font-cyber mb-1">ARTALE</h1>
             <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Raid Commander</h2>
-            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.5.2</div>
+            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.5.3</div>
             <div id="loginLoading" class="text-cyan-500 text-sm font-bold animate-pulse"><i
                     class="fas fa-circle-notch fa-spin mr-2"></i>連線至資料庫中...</div>
             <div id="loginForm" class="hidden space-y-4">
@@ -172,7 +172,7 @@
                 <div>
                     <h1
                         class="text-3xl font-black italic tracking-tighter text-cyan-400 font-cyber drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
-                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.5.2</span></h1>
+                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.5.3</span></h1>
                     <div id="currentWeekRange"
                         class="text-[10px] text-cyan-100 font-cyber uppercase tracking-widest mt-1 opacity-70">System
                         Online</div>
@@ -459,8 +459,11 @@
         <div class="glass-card w-full max-w-4xl max-h-[85vh] flex flex-col rounded-3xl border border-amber-500/50 shadow-[0_0_40px_rgba(245,158,11,0.3)] overflow-hidden transform scale-95 transition-transform duration-300"
             id="leaderboardModalContent">
             <div class="bg-amber-950/50 p-4 border-b border-amber-500/30 flex justify-between items-center">
-                <h3 class="text-lg font-black text-amber-400 font-cyber tracking-widest italic drop-shadow-md"><i
-                        class="fas fa-trophy mr-2"></i>AGENT LEADERBOARD</h3>
+                <div>
+                    <h3 class="text-lg font-black text-amber-400 font-cyber tracking-widest italic drop-shadow-md"><i
+                            class="fas fa-trophy mr-2"></i>AGENT LEADERBOARD</h3>
+                    <div id="statsPeriodLabel" class="text-[10px] text-amber-200/60 mt-0.5 tracking-wide"></div>
+                </div>
                 <button onclick="closeLeaderboard()" class="text-slate-400 hover:text-red-400 transition-colors"><i
                         class="fas fa-times text-xl"></i></button>
             </div>
@@ -472,7 +475,7 @@
                             <th class="p-3 text-center">總參戰次數</th>
                             <th class="p-3 text-center border-l border-amber-500/20">總獲得掉落物</th>
                             <th class="p-3 text-center">幸運掉落率</th>
-                            <th class="p-3 rounded-tr-lg border-l border-amber-500/20 w-1/2">歷年掉落明細</th>
+                            <th class="p-3 rounded-tr-lg border-l border-amber-500/20 w-1/2">掉落明細</th>
                         </tr>
                     </thead>
                     <tbody id="leaderboardTableBody" class="text-xs text-slate-300">
@@ -771,7 +774,7 @@
             }
         }
 
-        async function init() { console.log("Artale Raid Commander Pro V1.5.2 Loaded"); updateDates(); await fetchData(); }
+        async function init() { console.log("Artale Raid Commander Pro V1.5.3 Loaded"); updateDates(); await fetchData(); }
 
         // 統一的抓資料管道。Google Apps Script 有相當比例的機率會回傳 HTML
         // 錯誤頁而不是 JSON（實測約每五次中一次），所以這裡會自動重試，
@@ -1423,35 +1426,76 @@
             setTimeout(() => { modal.classList.add('hidden'); }, 300);
         }
 
+        // 舊的戰績已不可考，統計從克雷塞爾（樹王）上線的那一週重新起算。
+        // 這一天（含）以後的出團與掉落才列入排行榜；要改期間只要改這個日期。
+        const STATS_START = new Date(2026, 8, 14); // 2026/9/14，月份從 0 起算
+        const STATS_START_LABEL = "2026/9/14";
+
+        // finalized 的週次是「2026/9/14 - 2026/9/20」，drops 的時間戳是
+        // 「2026/4/1 上午11:46:07」，兩者都取字串裡的第一個日期來比。
+        function parseLooseDate(str) {
+            const m = String(str == null ? '' : str).match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
+            return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+        }
+
+        function isWithinStatsPeriod(str) {
+            const d = parseLooseDate(str);
+            return d ? d >= STATS_START : false; // 讀不出日期就不計入，寧可少算也不要亂算
+        }
+
+        // drops 工作表是後端 append 出來的，沒有標頭列，所以不能無條件跳掉第一列，
+        // 否則第一筆掉落紀錄永遠會被當成標頭吃掉。
+        // 判斷方式：標頭的第一格是欄位名稱（不含數字），資料列的第一格是時間戳（必含數字）。
+        function dropDataRows(rows) {
+            if (!Array.isArray(rows)) return [];
+            return rows.filter(r => Array.isArray(r) && r.length >= 4 && /\d/.test(String(r[0] == null ? '' : r[0])));
+        }
+
+        // 團長重複按「發布」會在 finalized 留下一模一樣的列，
+        // 同一週、同副本、同時段就是同一場，出團次數只能算一次。
+        function uniqueFinalizedRuns(rows) {
+            const seen = new Set();
+            const out = [];
+            (rows || []).slice(1).forEach(f => {
+                const key = [f[0], f[1], f[2]].join('|');
+                if (seen.has(key)) return;
+                seen.add(key);
+                out.push(f);
+            });
+            return out;
+        }
+
         function renderLeaderboard() {
             const tableBody = document.getElementById('leaderboardTableBody');
-            if(!db.drops) db.drops = [];
-            
+            const periodEl = document.getElementById('statsPeriodLabel');
+            if (periodEl) periodEl.innerText = `統計期間：${STATS_START_LABEL} 起（克雷塞爾上線後重新計算）`;
+            if (!db.drops) db.drops = [];
+
             const stats = {};
             db.members.slice(1).forEach(m => {
                 stats[m[0]] = { name: m[0], runs: 0, dropCount: 0, items: [] };
             });
 
-            db.finalized.slice(1).forEach(f => {
+            uniqueFinalizedRuns(db.finalized).filter(f => isWithinStatsPeriod(f[0])).forEach(f => {
                 const participantsStr = f[3] || "";
-                if(participantsStr) {
-                    const pList = participantsStr.split(",");
-                    pList.forEach(p => {
-                        if(stats[p]) stats[p].runs++;
+                if (participantsStr) {
+                    participantsStr.split(",").forEach(p => {
+                        const name = String(p).trim();
+                        if (stats[name]) stats[name].runs++;
                     });
                 }
             });
 
-            db.drops.slice(1).forEach(d => {
-                const playerName = d[2];
+            dropDataRows(db.drops).filter(d => isWithinStatsPeriod(d[0])).forEach(d => {
+                const playerName = String(d[2] == null ? '' : d[2]).trim();
                 const item = d[3];
-                if(stats[playerName] && item && item !== "無") {
+                if (stats[playerName] && item && item !== "無") {
                     stats[playerName].dropCount++;
                     stats[playerName].items.push(item);
                 }
             });
 
-            const sortedStats = Object.values(stats).sort((a,b) => b.dropCount - a.dropCount || b.runs - a.runs);
+            const sortedStats = Object.values(stats).sort((a, b) => b.dropCount - a.dropCount || b.runs - a.runs);
 
             tableBody.innerHTML = sortedStats.map(s => {
                 const rate = s.runs > 0 ? ((s.dropCount / s.runs) * 100).toFixed(1) + "%" : "0%";
@@ -1524,47 +1568,96 @@
             setTimeout(() => { modal.classList.add('hidden'); }, 300);
         }
 
+        // 和排程送出同樣的問題：no-cors 讀不到回應，catch 幾乎不會觸發，
+        // 所以必須重抓資料確認這幾筆掉落真的寫進去了。
+        async function verifyDrops(records, beforeCounts) {
+            const countEach = rows => records.map(rec => dropDataRows(rows).filter(r =>
+                String(r[1]).trim() === rec.boss &&
+                String(r[2]).trim() === rec.player &&
+                String(r[3]).trim() === rec.item).length);
+            for (let i = 0; i < 2; i++) {
+                await new Promise(r => setTimeout(r, i === 0 ? 1500 : 3000));
+                try {
+                    const fresh = await fetchDbSnapshot();
+                    const after = countEach(fresh.drops);
+                    if (after.every((n, idx) => n > beforeCounts[idx])) {
+                        db = fresh;
+                        lastFetchAt = Date.now();
+                        return true;
+                    }
+                } catch (e) { /* 再試一次 */ }
+            }
+            return false;
+        }
+
         async function submitDrops() {
-            if(isSavingDrop) return;
+            if (isSavingDrop) return;
             isSavingDrop = true;
             playSound('click');
-            document.getElementById('btnSubmitDrops').innerText = "上傳戰績中...";
-            document.getElementById('btnSubmitDrops').classList.add('animate-pulse');
-            
+            const btn = document.getElementById('btnSubmitDrops');
+            btn.innerText = "上傳戰績中...";
+            btn.classList.add('animate-pulse');
+            btn.disabled = true;
+
             const raidKey = document.getElementById('raidSelect').value;
             const raidName = bossData[raidKey].name;
 
             const records = [];
             currentDropParticipants.forEach((p, idx) => {
                 const item = document.getElementById(`drop_select_${idx}`).value;
-                if(item !== "無") {
+                if (item !== "無") {
                     records.push({ player: p, item: item, boss: raidName });
                 }
             });
 
-            if(records.length > 0) {
-                try {
-                    await fetch(API_URL, { 
-                        method: 'POST', 
-                        mode: 'no-cors',
-                        body: JSON.stringify({ 
-                            type: "RECORD_DROP", 
-                            records: records
-                        }) 
-                    });
-                    alert('🏆 掉落物結算完畢！系統已記錄至戰績表！');
-                } catch(e) {
-                    alert('連線失敗，請檢查網路狀態');
-                }
-            } else {
-                alert('🏆 紀錄完成：此次任務全隊大爆死，毫無收穫！');
+            const finish = () => {
+                isSavingDrop = false;
+                btn.innerText = "確認送出分配表";
+                btn.classList.remove('animate-pulse');
+                btn.disabled = false;
+            };
+
+            if (records.length === 0) {
+                finish();
+                closeDropModal();
+                showToast('🏆 紀錄完成：此次任務全隊大爆死，毫無收穫！', 'ok');
+                return;
             }
-            
-            isSavingDrop = false;
-            document.getElementById('btnSubmitDrops').innerText = "確認送出分配表";
-            document.getElementById('btnSubmitDrops').classList.remove('animate-pulse');
+
+            const beforeCounts = records.map(rec => dropDataRows(db.drops).filter(r =>
+                String(r[1]).trim() === rec.boss &&
+                String(r[2]).trim() === rec.player &&
+                String(r[3]).trim() === rec.item).length);
+
+            try {
+                await fetch(API_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    body: JSON.stringify({ type: "RECORD_DROP", records: records })
+                });
+            } catch (e) {
+                console.error("Record drop failed:", e);
+            }
+
             closeDropModal();
-            location.reload();
+            showToast('已送出，正在確認伺服器有沒有收到…', 'info', true);
+
+            const ok = await verifyDrops(records, beforeCounts);
+            finish();
+
+            if (ok) {
+                updateUI();
+                renderLeaderboard();
+                showToast(`🏆 已確認寫入戰績表（${records.length} 筆）`, 'ok');
+            } else {
+                showToast('⚠️ 戰績未能確認寫入，請重開分配視窗再送一次', 'error');
+                setTimeout(() => {
+                    alert('⚠️ 戰績未能確認寫入\n\n'
+                        + '這 ' + records.length + ' 筆掉落可能沒有存到伺服器。\n'
+                        + '請重新開啟分配視窗再送出一次。\n'
+                        + '若持續失敗，請檢查網路或稍後再試。');
+                }, 50);
+            }
         }
 
         // ===== 參考圖浮層功能 =====
