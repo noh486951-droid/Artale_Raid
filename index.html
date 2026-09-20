@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Artale Raid Commander Pro V1.5.4</title>
+    <title>Artale Raid Commander Pro V1.5.5</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -137,7 +137,7 @@
             </div>
             <h1 class="text-2xl font-black italic tracking-tighter text-cyan-400 font-cyber mb-1">ARTALE</h1>
             <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Raid Commander</h2>
-            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.5.4</div>
+            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.5.5</div>
             <div id="loginLoading" class="text-cyan-500 text-sm font-bold animate-pulse"><i
                     class="fas fa-circle-notch fa-spin mr-2"></i>連線至資料庫中...</div>
             <div id="loginForm" class="hidden space-y-4">
@@ -172,7 +172,7 @@
                 <div>
                     <h1
                         class="text-3xl font-black italic tracking-tighter text-cyan-400 font-cyber drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
-                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.5.4</span></h1>
+                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.5.5</span></h1>
                     <div id="currentWeekRange"
                         class="text-[10px] text-cyan-100 font-cyber uppercase tracking-widest mt-1 opacity-70">System
                         Online</div>
@@ -618,8 +618,9 @@
         let globalMasterSchedule = {};
         let lastFetchAt = 0;
         let isRefreshing = false;
-        // 回到分頁時，距上次抓取超過這個間隔才重抓，避免頻繁切換猛打 API
-        const REFRESH_MIN_GAP_MS = 20000;
+        // 回到分頁時，距上次抓取超過這個間隔才重抓。
+        // GAS 撐不住頻繁請求（整包資料 50KB 以上），間隔拉長以免把端點打到劣化。
+        const REFRESH_MIN_GAP_MS = 60000;
 
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioContext();
@@ -774,48 +775,76 @@
             }
         }
 
-        async function init() { console.log("Artale Raid Commander Pro V1.5.4 Loaded"); updateDates(); await fetchData(); }
+        async function init() { console.log("Artale Raid Commander Pro V1.5.5 Loaded"); updateDates(); await fetchData(); }
 
         // 統一的抓資料管道。Google Apps Script 有相當比例的機率會回傳 HTML
         // 錯誤頁而不是 JSON（實測約每五次中一次），所以這裡會自動重試，
         // 並且絕不讓壞掉的回應寫進 db。
-        const FETCH_ATTEMPTS = 3;
+        // Google Apps Script 的回應時間分成兩種狀態：正常時 3~8 秒，
+        // 劣化時整個卡住（實測會停在 302 那一跳超過 20 秒）。
+        // 所以第一次用短逾時走快路徑，第二次放寬，兼顧兩種情況。
+        // 沒有逾時的話，卡住的請求會讓畫面永遠轉圈。
+        const FETCH_TIMEOUTS = [8000, 18000];
+        const FETCH_ATTEMPTS = FETCH_TIMEOUTS.length;
 
-        async function fetchOnce() {
-            const res = await fetch(API_URL + "?t=" + new Date().getTime());
-            const text = await res.text();
-            let data;
+        async function fetchOnce(timeoutMs) {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), timeoutMs);
             try {
-                data = JSON.parse(text);
+                const res = await fetch(API_URL + "?t=" + new Date().getTime(), { signal: ctrl.signal });
+                const text = await res.text();
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    throw new Error("伺服器回傳的不是資料（可能是 Google 的錯誤頁）");
+                }
+                if (!data || !Array.isArray(data.members)) throw new Error("回傳內容不完整");
+                if (!data.schedules) data.schedules = [];
+                if (!data.drops) data.drops = []; // Fallback 若尚未提供 Drops 工作表
+                return data;
             } catch (e) {
-                throw new Error("伺服器回傳的不是資料（可能是 Google 的錯誤頁）");
+                if (e && e.name === 'AbortError') throw new Error(`連線逾時（超過 ${timeoutMs / 1000} 秒沒有回應）`);
+                throw e;
+            } finally {
+                clearTimeout(timer);
             }
-            if (!data || !Array.isArray(data.members)) throw new Error("回傳內容不完整");
-            if (!data.schedules) data.schedules = [];
-            if (!data.drops) data.drops = []; // Fallback 若尚未提供 Drops 工作表
-            return data;
         }
 
-        async function fetchDbSnapshot() {
+        // onAttempt 讓呼叫端可以把「第幾次嘗試」顯示出來，
+        // 否則重試期間畫面毫無變化，使用者會以為當掉了。
+        async function fetchDbSnapshot(onAttempt) {
             let lastErr;
             for (let i = 0; i < FETCH_ATTEMPTS; i++) {
+                if (onAttempt) onAttempt(i + 1, FETCH_ATTEMPTS);
                 try {
-                    return await fetchOnce();
+                    return await fetchOnce(FETCH_TIMEOUTS[i]);
                 } catch (e) {
                     lastErr = e;
                     console.warn(`抓取失敗（第 ${i + 1} 次 / 共 ${FETCH_ATTEMPTS} 次）：${e.message}`);
-                    if (i < FETCH_ATTEMPTS - 1) await new Promise(r => setTimeout(r, 800 * (i + 1)));
+                    if (i < FETCH_ATTEMPTS - 1) await new Promise(r => setTimeout(r, 500 * (i + 1)));
                 }
             }
             throw lastErr;
         }
 
         async function fetchData() {
+            const loadEl = document.getElementById('loginLoading');
+            loadEl.classList.add('animate-pulse');
+            const showAttempt = (n, total) => {
+                loadEl.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i>連線至資料庫中...'
+                    + (n > 1 ? `<div class="text-[11px] text-slate-400 font-normal mt-1">Google 伺服器沒回應，重試中（第 ${n} 次 / 共 ${total} 次）</div>` : '');
+            };
             try {
-                db = await fetchDbSnapshot();
+                db = await fetchDbSnapshot(showAttempt);
                 lastFetchAt = Date.now();
                 setupLoginScreen();
-            } catch (e) { document.getElementById('loginLoading').innerHTML = '<i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>連線失敗：' + e.message; }
+            } catch (e) {
+                loadEl.classList.remove('animate-pulse');
+                loadEl.innerHTML = `<div class="text-red-400 mb-2"><i class="fas fa-exclamation-triangle mr-2"></i>連線失敗：${e.message}</div>
+                    <div class="text-[11px] text-slate-400 font-normal mb-3">Google 伺服器忙碌時會這樣，稍等一下再重試通常就會好</div>
+                    <button onclick="fetchData()" class="bg-cyan-500 hover:bg-cyan-400 text-slate-950 px-5 py-2 rounded-xl text-xs font-black transition-all shadow-[0_0_15px_rgba(34,211,238,0.4)]"><i class="fas fa-rotate-right mr-1"></i>重新連線</button>`;
+            }
         }
 
         // 背景重新抓資料（不碰登入畫面，不會重複塞選單）
@@ -859,7 +888,9 @@
             document.getElementById('loginLoading').style.display = 'none';
             document.getElementById('loginForm').classList.remove('hidden');
             const select = document.getElementById('loginSelect');
-            select.innerHTML += db.members.slice(1).map(m => `<option value="${m[0]}">${m[0]} (${m[1]})</option>`).join('');
+            // 用 = 而非 += ：失敗後按「重新連線」會再跑一次，用 += 會疊出重複的名字
+            select.innerHTML = `<option value="">選擇您的角色 ID...</option>`
+                + db.members.slice(1).map(m => `<option value="${m[0]}">${m[0]} (${m[1]})</option>`).join('');
             const savedId = localStorage.getItem('artale_raid_id');
             if (savedId && db.members.find(m => m[0] === savedId)) { 
                 select.value = savedId; 
