@@ -189,6 +189,10 @@
                     <div class="w-px h-4 bg-slate-700 mx-1"></div><button onclick="logout()"
                         class="text-xs text-slate-400 hover:text-white transition-colors">切換</button>
                 </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="manualRefresh()" id="btnRefresh" title="重新抓取伺服器上的最新資料"
+                        class="flex items-center gap-2 bg-black/40 hover:bg-cyan-900/40 border border-white/10 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-300 px-3 py-2 rounded-xl text-xs font-bold transition-all backdrop-blur-sm">
+                        <i id="refreshIcon" class="fas fa-rotate-right"></i> 重新整理</button>
                 <div class="flex bg-black/40 p-1 rounded-xl border border-white/10 backdrop-blur-sm">
                     <button onclick="changeWeek(0)" id="w0"
                         class="px-5 py-1.5 rounded-lg text-xs font-bold bg-cyan-600 text-white shadow-lg">本週</button>
@@ -196,6 +200,7 @@
                         class="px-5 py-1.5 rounded-lg text-xs font-bold text-slate-300">下週</button>
                     <button onclick="changeWeek(2)" id="w2"
                         class="px-5 py-1.5 rounded-lg text-xs font-bold text-slate-300">次週</button>
+                </div>
                 </div>
             </div>
         </header>
@@ -382,6 +387,8 @@
             </section>
         </div>
     </div>
+
+    <div id="syncToast" class="fixed top-4 left-1/2 -translate-x-1/2 z-[300] px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-950/95 backdrop-blur-xl border border-cyan-500/50 text-cyan-200 shadow-2xl opacity-0 pointer-events-none transition-opacity duration-300"></div>
 
     <div id="reportActionBar"
         class="fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-xl border-t border-cyan-500/50 p-4 transform translate-y-full transition-transform duration-300 z-50 flex flex-col sm:flex-row items-center justify-center gap-4 shadow-[0_-15px_40px_rgba(0,0,0,0.5)]">
@@ -606,6 +613,10 @@
         let selectedTimes = {};
         let adminSelection = null;
         let globalMasterSchedule = {};
+        let lastFetchAt = 0;
+        let isRefreshing = false;
+        // 回到分頁時，距上次抓取超過這個間隔才重抓，避免頻繁切換猛打 API
+        const REFRESH_MIN_GAP_MS = 20000;
 
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioContext();
@@ -624,6 +635,26 @@
                 osc.frequency.setValueAtTime(440, now); osc.frequency.setValueAtTime(554, now + 0.1); osc.frequency.setValueAtTime(659, now + 0.2); osc.frequency.setValueAtTime(880, now + 0.3);
                 gain.gain.setValueAtTime(0.08, now); gain.gain.linearRampToValueAtTime(0, now + 0.6);
                 osc.start(now); osc.stop(now + 0.6);
+            }
+        }
+
+        let toastTimer = null;
+        function showToast(msg, kind, sticky) {
+            const el = document.getElementById('syncToast');
+            if (!el) return;
+            const tones = {
+                info: 'border-cyan-500/50 text-cyan-200',
+                ok: 'border-emerald-500/50 text-emerald-200',
+                error: 'border-red-500/60 text-red-200'
+            };
+            el.className = 'fixed top-4 left-1/2 -translate-x-1/2 z-[300] px-4 py-2.5 rounded-xl text-xs font-bold '
+                + 'bg-slate-950/95 backdrop-blur-xl border shadow-2xl pointer-events-none transition-opacity duration-300 '
+                + (tones[kind] || tones.info);
+            el.innerText = msg;
+            el.style.opacity = '1';
+            clearTimeout(toastTimer);
+            if (!sticky) {
+                toastTimer = setTimeout(() => { el.style.opacity = '0'; }, kind === 'error' ? 8000 : 3000);
             }
         }
 
@@ -726,7 +757,7 @@
             kressel: `
                 <div class="text-center py-6 space-y-4">
                     <p class="text-slate-300 text-sm">克雷塞爾的完整戰術圖放在 Canva，點下方按鈕開啟。</p>
-                    <a href="https://www.canva.com/design/DAHVdgokOlQ/KvOUy4V_uFkFJbuYT3HKFQ/edit" target="_blank" rel="noopener noreferrer"
+                    <a href="https://www.canva.com/design/DAHVdgokOlQ/KvOUy4V_uFkFJbuYT3HKFQ/view" target="_blank" rel="noopener noreferrer"
                         class="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 px-6 py-3 rounded-xl font-black shadow-[0_0_15px_rgba(34,211,238,0.4)] transition-all">
                         <i class="fas fa-external-link-alt"></i> 開啟克雷塞爾戰術圖
                     </a>
@@ -742,13 +773,83 @@
 
         async function init() { console.log("Artale Raid Commander Pro V1.5.2 Loaded"); updateDates(); await fetchData(); }
 
+        // 統一的抓資料管道。Google Apps Script 有相當比例的機率會回傳 HTML
+        // 錯誤頁而不是 JSON（實測約每五次中一次），所以這裡會自動重試，
+        // 並且絕不讓壞掉的回應寫進 db。
+        const FETCH_ATTEMPTS = 3;
+
+        async function fetchOnce() {
+            const res = await fetch(API_URL + "?t=" + new Date().getTime());
+            const text = await res.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                throw new Error("伺服器回傳的不是資料（可能是 Google 的錯誤頁）");
+            }
+            if (!data || !Array.isArray(data.members)) throw new Error("回傳內容不完整");
+            if (!data.schedules) data.schedules = [];
+            if (!data.drops) data.drops = []; // Fallback 若尚未提供 Drops 工作表
+            return data;
+        }
+
+        async function fetchDbSnapshot() {
+            let lastErr;
+            for (let i = 0; i < FETCH_ATTEMPTS; i++) {
+                try {
+                    return await fetchOnce();
+                } catch (e) {
+                    lastErr = e;
+                    console.warn(`抓取失敗（第 ${i + 1} 次 / 共 ${FETCH_ATTEMPTS} 次）：${e.message}`);
+                    if (i < FETCH_ATTEMPTS - 1) await new Promise(r => setTimeout(r, 800 * (i + 1)));
+                }
+            }
+            throw lastErr;
+        }
+
         async function fetchData() {
             try {
-                const res = await fetch(API_URL + "?t=" + new Date().getTime()); 
-                db = await res.json(); 
-                if(!db.drops) db.drops = []; // Fallback 若尚未提供 Drops 工作表
+                db = await fetchDbSnapshot();
+                lastFetchAt = Date.now();
                 setupLoginScreen();
-            } catch (e) { document.getElementById('loginLoading').innerHTML = '<i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>連線失敗，請檢查 API 網址'; }
+            } catch (e) { document.getElementById('loginLoading').innerHTML = '<i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>連線失敗：' + e.message; }
+        }
+
+        // 背景重新抓資料（不碰登入畫面，不會重複塞選單）
+        async function refreshData(opts) {
+            opts = opts || {};
+            if (isRefreshing) return false;
+            if (isReporting && !opts.allowWhileReporting) {
+                if (opts.manual) showToast('正在填寫中，送出或取消後再重新整理', 'info');
+                return false;
+            }
+            isRefreshing = true;
+            const icon = document.getElementById('refreshIcon');
+            if (icon) icon.classList.add('fa-spin');
+            try {
+                db = await fetchDbSnapshot();
+                lastFetchAt = Date.now();
+                if (!document.getElementById('mainApp').classList.contains('hidden')) updateUI();
+                if (opts.manual) showToast('✅ 已更新到最新資料', 'ok');
+                return true;
+            } catch (e) {
+                console.error("重新整理失敗:", e);
+                showToast('⚠️ 重新整理失敗：' + e.message, 'error');
+                return false;
+            } finally {
+                isRefreshing = false;
+                if (icon) icon.classList.remove('fa-spin');
+            }
+        }
+
+        function manualRefresh() { playSound('click'); refreshData({ manual: true }); }
+
+        // 回到分頁或視窗時自動重抓，避免手機背景分頁停在舊快照
+        function autoRefreshIfStale() {
+            if (document.visibilityState !== 'visible') return;
+            if (document.getElementById('mainApp').classList.contains('hidden')) return;
+            if (Date.now() - lastFetchAt < REFRESH_MIN_GAP_MS) return;
+            refreshData({});
         }
 
         function setupLoginScreen() {
@@ -995,9 +1096,40 @@
 
         function cancelReportMode() { playSound('click'); isReporting = false; document.getElementById('btnStartReport').classList.remove('hidden'); document.getElementById('reportActionBar').classList.add('translate-y-full'); renderGrid(); }
 
+        function sameSchedule(rowVal, expectedStr, raidKey) {
+            if (expectedStr === "OFF") return rowVal === "OFF";
+            if (rowVal === "OFF" || rowVal == null) return false;
+            try {
+                const a = JSON.parse(rowVal)[raidKey] || {};
+                const b = JSON.parse(expectedStr)[raidKey] || {};
+                const keysOf = o => Object.keys(o).sort().join('|');
+                return keysOf(a) === keysOf(b)
+                    && String(a.__runs__ || '') === String(b.__runs__ || '')
+                    && String(a.__wish__ || '') === String(b.__wish__ || '');
+            } catch (e) { return false; }
+        }
+
+        // POST 用 mode:'no-cors'，回應是 opaque 的、讀不到成功與否。
+        // 只能重抓一次資料，確認自己那筆真的落地。
+        async function verifySaved(weekStr, expectedStr, raidKey) {
+            for (let i = 0; i < 2; i++) {
+                await new Promise(r => setTimeout(r, i === 0 ? 1500 : 3000));
+                try {
+                    const fresh = await fetchDbSnapshot();
+                    const row = fresh.schedules.find(s => s[0] === weekStr && s[1] === currentUser);
+                    if (row && sameSchedule(row[2], expectedStr, raidKey)) {
+                        db = fresh;
+                        lastFetchAt = Date.now();
+                        return true;
+                    }
+                } catch (e) { /* 再試一次 */ }
+            }
+            return false;
+        }
+
         async function saveMySchedule(isOff) {
-            playSound('click'); 
-            const raidKey = document.getElementById('raidSelect').value; 
+            playSound('click');
+            const raidKey = document.getElementById('raidSelect').value;
             const btn = event.target;
             const originalText = btn.innerText;
             btn.innerText = isOff ? "休假處理中..." : "送出中...";
@@ -1005,41 +1137,74 @@
 
             let finalDataStr = "OFF";
             if (!isOff) {
-                const wishVal = document.getElementById('lootWishlist').value; 
+                const wishVal = document.getElementById('lootWishlist').value;
                 if (wishVal) selectedTimes.__wish__ = wishVal; else delete selectedTimes.__wish__;
                 const runsVal = document.getElementById('weeklyRuns').value;
                 if (runsVal) selectedTimes.__runs__ = Number(runsVal); else delete selectedTimes.__runs__;
-                globalMasterSchedule[raidKey] = selectedTimes; 
+                globalMasterSchedule[raidKey] = selectedTimes;
                 finalDataStr = JSON.stringify(globalMasterSchedule);
             }
             const weekStr = document.getElementById('currentWeekRange').innerText;
-            
+
             // Optimistic UI update for zero-latency response
             const existingIdx = db.schedules.findIndex(s => s[0] === weekStr && s[1] === currentUser);
+            const prevVal = existingIdx !== -1 ? db.schedules[existingIdx][2] : null;
             if (existingIdx !== -1) {
                 db.schedules[existingIdx][2] = finalDataStr;
             } else {
                 db.schedules.push([weekStr, currentUser, finalDataStr]);
             }
 
+            // 留著這次的選取，驗證失敗時可以直接重送
+            const pendingTimes = selectedTimes;
+            const pendingMaster = globalMasterSchedule;
+
             try {
-                await fetch(API_URL, { 
-                    method: 'POST', 
+                await fetch(API_URL, {
+                    method: 'POST',
                     mode: 'no-cors',
-                    body: JSON.stringify({ type: "SAVE_SCHEDULE", name: currentUser, week: weekStr, timeData: finalDataStr }) 
+                    body: JSON.stringify({ type: "SAVE_SCHEDULE", name: currentUser, week: weekStr, timeData: finalDataStr })
                 });
-                await checkAndNotifyAllReported(raidKey, weekStr);
-            } catch(e) {
+            } catch (e) {
                 console.error("Post data failed:", e);
             }
 
-            btn.innerText = "確認並送出";
+            btn.innerText = originalText;
             btn.disabled = false;
             updateUI();
+            showToast('已送出，正在確認伺服器有沒有收到…', 'info', true);
 
-            setTimeout(() => {
-                alert(isOff ? '🏖️ 本週休假已登記！' : `✅ 空檔回報成功！`);
-            }, 50);
+            const saved = await verifySaved(weekStr, finalDataStr, raidKey);
+
+            if (saved) {
+                updateUI();
+                showToast(isOff ? '🏖️ 本週休假已登記並同步' : '✅ 已確認存入伺服器，其他人重新整理就看得到', 'ok');
+                await checkAndNotifyAllReported(raidKey, weekStr);
+            } else {
+                // 還原成伺服器的真實狀態，不要讓畫面顯示根本沒存進去的資料
+                if (existingIdx !== -1) db.schedules[existingIdx][2] = prevVal;
+                else db.schedules = db.schedules.filter(s => !(s[0] === weekStr && s[1] === currentUser));
+                updateUI();
+                showToast('⚠️ 送出未能確認，資料可能沒存進伺服器', 'error');
+
+                if (!isOff) {
+                    // 回到回報模式並保留剛才的選取，讓使用者直接再按一次
+                    isReporting = true;
+                    document.getElementById('btnStartReport').classList.add('hidden');
+                    document.getElementById('reportActionBar').classList.remove('translate-y-full');
+                    selectedTimes = pendingTimes;
+                    globalMasterSchedule = pendingMaster;
+                    renderGrid();
+                }
+
+                setTimeout(() => {
+                    alert('⚠️ 送出未能確認\n\n'
+                        + '你的填寫可能沒有存到伺服器，其他人會看不到。\n'
+                        + '畫面已還原成伺服器上的實際資料。\n\n'
+                        + (isOff ? '請再按一次「本週全休」。' : '你剛才的選取還在，請再按一次「確認並送出」。') + '\n'
+                        + '若持續失敗，請檢查網路或稍後再試。');
+                }, 50);
+            }
         }
 
         function openChannelModal() {
@@ -1627,6 +1792,10 @@
             e.preventDefault();
             e.stopPropagation();
         });
+
+        // 頁面被切回前景時自動抓最新資料，解決「我填完別人沒看到」
+        document.addEventListener('visibilitychange', autoRefreshIfStale);
+        window.addEventListener('focus', autoRefreshIfStale);
 
         init();
     </script>
