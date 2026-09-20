@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Artale Raid Commander Pro V1.5.6</title>
+    <title>Artale Raid Commander Pro V1.5.7</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -137,7 +137,7 @@
             </div>
             <h1 class="text-2xl font-black italic tracking-tighter text-cyan-400 font-cyber mb-1">ARTALE</h1>
             <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Raid Commander</h2>
-            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.5.6</div>
+            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.5.7</div>
             <div id="loginLoading" class="text-cyan-500 text-sm font-bold animate-pulse"><i
                     class="fas fa-circle-notch fa-spin mr-2"></i>連線至資料庫中...</div>
             <div id="loginForm" class="hidden space-y-4">
@@ -172,7 +172,7 @@
                 <div>
                     <h1
                         class="text-3xl font-black italic tracking-tighter text-cyan-400 font-cyber drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
-                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.5.6</span></h1>
+                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.5.7</span></h1>
                     <div id="currentWeekRange"
                         class="text-[10px] text-cyan-100 font-cyber uppercase tracking-widest mt-1 opacity-70">System
                         Online</div>
@@ -775,7 +775,7 @@
             }
         }
 
-        async function init() { console.log("Artale Raid Commander Pro V1.5.6 Loaded"); updateDates(); await fetchData(); }
+        async function init() { console.log("Artale Raid Commander Pro V1.5.7 Loaded"); updateDates(); await fetchData(); }
 
         // 統一的抓資料管道。Google Apps Script 有相當比例的機率會回傳 HTML
         // 錯誤頁而不是 JSON（實測約每五次中一次），所以這裡會自動重試，
@@ -792,8 +792,11 @@
         const FETCH_HEDGE_AFTER_MS = 9000;      // 超過這個時間還沒回來就補一發
         const FETCH_OVERALL_TIMEOUT_MS = 32000; // 整體上限，到了才真的放棄
 
-        async function fetchOnce(signal) {
-            const res = await fetch(API_URL + "?t=" + new Date().getTime(), { signal });
+        async function fetchOnce(signal, fresh) {
+            // fresh=1 會讓後端跳過它的 30 秒快取。存檔後的驗證一定要用，
+            // 否則可能讀到快取裡的舊資料，把成功的儲存誤判成失敗。
+            const url = API_URL + "?t=" + new Date().getTime() + (fresh ? "&fresh=1" : "");
+            const res = await fetch(url, { signal });
             const text = await res.text();
             let data;
             try {
@@ -809,7 +812,8 @@
 
         // onProgress 讓呼叫端把「第幾發」顯示出來，
         // 否則等待期間畫面毫無變化，使用者會以為當掉了。
-        function fetchDbSnapshot(onProgress) {
+        function fetchDbSnapshot(onProgress, opts) {
+            const fresh = !!(opts && opts.fresh);
             return new Promise((resolve, reject) => {
                 const ctrls = [];
                 let launched = 0, inFlight = 0, done = false, lastErr = null;
@@ -829,7 +833,7 @@
                     if (onProgress) onProgress(launched, FETCH_MAX_REQUESTS);
                     const ctrl = new AbortController();
                     ctrls.push(ctrl);
-                    fetchOnce(ctrl.signal).then(data => {
+                    fetchOnce(ctrl.signal, fresh).then(data => {
                         if (done) return;
                         cleanup();
                         resolve(data);
@@ -1176,10 +1180,10 @@
             for (let i = 0; i < 2; i++) {
                 await new Promise(r => setTimeout(r, i === 0 ? 1500 : 3000));
                 try {
-                    const fresh = await fetchDbSnapshot();
-                    const row = fresh.schedules.find(s => s[0] === weekStr && s[1] === currentUser);
+                    const latest = await fetchDbSnapshot(null, { fresh: true });
+                    const row = latest.schedules.find(s => s[0] === weekStr && s[1] === currentUser);
                     if (row && sameSchedule(row[2], expectedStr, raidKey)) {
-                        db = fresh;
+                        db = latest;
                         lastFetchAt = Date.now();
                         return true;
                     }
@@ -1709,11 +1713,11 @@
             for (let i = 0; i < 2; i++) {
                 await new Promise(r => setTimeout(r, i === 0 ? 1500 : 3000));
                 try {
-                    const fresh = await fetchDbSnapshot();
+                    const latest = await fetchDbSnapshot(null, { fresh: true });
                     const ok = Object.keys(wanted).every(k =>
-                        countDropKey(fresh.drops, k) >= beforeCounts[k] + wanted[k]);
+                        countDropKey(latest.drops, k) >= beforeCounts[k] + wanted[k]);
                     if (ok) {
-                        db = fresh;
+                        db = latest;
                         lastFetchAt = Date.now();
                         return true;
                     }
