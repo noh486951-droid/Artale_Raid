@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Artale Raid Commander Pro V1.5.5</title>
+    <title>Artale Raid Commander Pro V1.5.6</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -137,7 +137,7 @@
             </div>
             <h1 class="text-2xl font-black italic tracking-tighter text-cyan-400 font-cyber mb-1">ARTALE</h1>
             <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Raid Commander</h2>
-            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.5.5</div>
+            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.5.6</div>
             <div id="loginLoading" class="text-cyan-500 text-sm font-bold animate-pulse"><i
                     class="fas fa-circle-notch fa-spin mr-2"></i>連線至資料庫中...</div>
             <div id="loginForm" class="hidden space-y-4">
@@ -172,7 +172,7 @@
                 <div>
                     <h1
                         class="text-3xl font-black italic tracking-tighter text-cyan-400 font-cyber drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
-                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.5.5</span></h1>
+                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.5.6</span></h1>
                     <div id="currentWeekRange"
                         class="text-[10px] text-cyan-100 font-cyber uppercase tracking-widest mt-1 opacity-70">System
                         Online</div>
@@ -775,57 +775,84 @@
             }
         }
 
-        async function init() { console.log("Artale Raid Commander Pro V1.5.5 Loaded"); updateDates(); await fetchData(); }
+        async function init() { console.log("Artale Raid Commander Pro V1.5.6 Loaded"); updateDates(); await fetchData(); }
 
         // 統一的抓資料管道。Google Apps Script 有相當比例的機率會回傳 HTML
         // 錯誤頁而不是 JSON（實測約每五次中一次），所以這裡會自動重試，
         // 並且絕不讓壞掉的回應寫進 db。
-        // Google Apps Script 的回應時間分成兩種狀態：正常時 3~8 秒，
-        // 劣化時整個卡住（實測會停在 302 那一跳超過 20 秒）。
-        // 所以第一次用短逾時走快路徑，第二次放寬，兼顧兩種情況。
-        // 沒有逾時的話，卡住的請求會讓畫面永遠轉圈。
-        const FETCH_TIMEOUTS = [8000, 18000];
-        const FETCH_ATTEMPTS = FETCH_TIMEOUTS.length;
+        // Google Apps Script 的回應時間非常不穩：實測同一分鐘內可能是 6 秒、
+        // 也可能是 17 秒，偶爾整個卡住不回應（停在 302 那一跳）。
+        //
+        // 「逾時就取消重來」在這種分布下是錯的解法：逾時設短會把只是比較慢
+        // 但其實會回來的正常請求砍掉，設長又會在真的卡住時乾等。
+        //
+        // 改用補發：前一發還沒回來就再補一發，但不取消前一發，誰先回來就用誰。
+        // 這樣慢的請求不會被白白丟掉，卡住的請求也不會拖著整個畫面。
+        const FETCH_MAX_REQUESTS = 3;
+        const FETCH_HEDGE_AFTER_MS = 9000;      // 超過這個時間還沒回來就補一發
+        const FETCH_OVERALL_TIMEOUT_MS = 32000; // 整體上限，到了才真的放棄
 
-        async function fetchOnce(timeoutMs) {
-            const ctrl = new AbortController();
-            const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+        async function fetchOnce(signal) {
+            const res = await fetch(API_URL + "?t=" + new Date().getTime(), { signal });
+            const text = await res.text();
+            let data;
             try {
-                const res = await fetch(API_URL + "?t=" + new Date().getTime(), { signal: ctrl.signal });
-                const text = await res.text();
-                let data;
-                try {
-                    data = JSON.parse(text);
-                } catch (e) {
-                    throw new Error("伺服器回傳的不是資料（可能是 Google 的錯誤頁）");
-                }
-                if (!data || !Array.isArray(data.members)) throw new Error("回傳內容不完整");
-                if (!data.schedules) data.schedules = [];
-                if (!data.drops) data.drops = []; // Fallback 若尚未提供 Drops 工作表
-                return data;
+                data = JSON.parse(text);
             } catch (e) {
-                if (e && e.name === 'AbortError') throw new Error(`連線逾時（超過 ${timeoutMs / 1000} 秒沒有回應）`);
-                throw e;
-            } finally {
-                clearTimeout(timer);
+                throw new Error("伺服器回傳的不是資料（可能是 Google 的錯誤頁）");
             }
+            if (!data || !Array.isArray(data.members)) throw new Error("回傳內容不完整");
+            if (!data.schedules) data.schedules = [];
+            if (!data.drops) data.drops = []; // Fallback 若尚未提供 Drops 工作表
+            return data;
         }
 
-        // onAttempt 讓呼叫端可以把「第幾次嘗試」顯示出來，
-        // 否則重試期間畫面毫無變化，使用者會以為當掉了。
-        async function fetchDbSnapshot(onAttempt) {
-            let lastErr;
-            for (let i = 0; i < FETCH_ATTEMPTS; i++) {
-                if (onAttempt) onAttempt(i + 1, FETCH_ATTEMPTS);
-                try {
-                    return await fetchOnce(FETCH_TIMEOUTS[i]);
-                } catch (e) {
-                    lastErr = e;
-                    console.warn(`抓取失敗（第 ${i + 1} 次 / 共 ${FETCH_ATTEMPTS} 次）：${e.message}`);
-                    if (i < FETCH_ATTEMPTS - 1) await new Promise(r => setTimeout(r, 500 * (i + 1)));
-                }
-            }
-            throw lastErr;
+        // onProgress 讓呼叫端把「第幾發」顯示出來，
+        // 否則等待期間畫面毫無變化，使用者會以為當掉了。
+        function fetchDbSnapshot(onProgress) {
+            return new Promise((resolve, reject) => {
+                const ctrls = [];
+                let launched = 0, inFlight = 0, done = false, lastErr = null;
+                let hedgeTimer = null, overallTimer = null;
+
+                const cleanup = () => {
+                    done = true;
+                    clearInterval(hedgeTimer);
+                    clearTimeout(overallTimer);
+                    ctrls.forEach(c => { try { c.abort(); } catch (e) { } });
+                };
+
+                const launch = () => {
+                    if (done || launched >= FETCH_MAX_REQUESTS) return;
+                    launched++;
+                    inFlight++;
+                    if (onProgress) onProgress(launched, FETCH_MAX_REQUESTS);
+                    const ctrl = new AbortController();
+                    ctrls.push(ctrl);
+                    fetchOnce(ctrl.signal).then(data => {
+                        if (done) return;
+                        cleanup();
+                        resolve(data);
+                    }).catch(err => {
+                        inFlight--;
+                        if (done || (err && err.name === 'AbortError')) return;
+                        lastErr = err;
+                        console.warn(`抓取失敗（第 ${launched} 發 / 上限 ${FETCH_MAX_REQUESTS} 發）：${err.message}`);
+                        if (launched < FETCH_MAX_REQUESTS) launch();           // 失敗就立刻補一發
+                        else if (inFlight === 0) { cleanup(); reject(lastErr); }
+                    });
+                };
+
+                overallTimer = setTimeout(() => {
+                    if (done) return;
+                    cleanup();
+                    reject(lastErr || new Error(`連線逾時（超過 ${FETCH_OVERALL_TIMEOUT_MS / 1000} 秒沒有回應）`));
+                }, FETCH_OVERALL_TIMEOUT_MS);
+
+                hedgeTimer = setInterval(launch, FETCH_HEDGE_AFTER_MS);
+
+                launch();
+            });
         }
 
         async function fetchData() {
@@ -833,7 +860,7 @@
             loadEl.classList.add('animate-pulse');
             const showAttempt = (n, total) => {
                 loadEl.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i>連線至資料庫中...'
-                    + (n > 1 ? `<div class="text-[11px] text-slate-400 font-normal mt-1">Google 伺服器沒回應，重試中（第 ${n} 次 / 共 ${total} 次）</div>` : '');
+                    + (n > 1 ? `<div class="text-[11px] text-slate-400 font-normal mt-1">Google 伺服器回應較慢，補送請求中（第 ${n} 發 / 上限 ${total} 發）</div>` : '');
             };
             try {
                 db = await fetchDbSnapshot(showAttempt);
