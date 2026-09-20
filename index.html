@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Artale Raid Commander Pro V1.5.1</title>
+    <title>Artale Raid Commander Pro V1.5.2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -137,7 +137,7 @@
             </div>
             <h1 class="text-2xl font-black italic tracking-tighter text-cyan-400 font-cyber mb-1">ARTALE</h1>
             <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Raid Commander</h2>
-            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.5.1</div>
+            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.5.2</div>
             <div id="loginLoading" class="text-cyan-500 text-sm font-bold animate-pulse"><i
                     class="fas fa-circle-notch fa-spin mr-2"></i>連線至資料庫中...</div>
             <div id="loginForm" class="hidden space-y-4">
@@ -172,7 +172,7 @@
                 <div>
                     <h1
                         class="text-3xl font-black italic tracking-tighter text-cyan-400 font-cyber drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
-                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.5.1</span></h1>
+                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.5.2</span></h1>
                     <div id="currentWeekRange"
                         class="text-[10px] text-cyan-100 font-cyber uppercase tracking-widest mt-1 opacity-70">System
                         Online</div>
@@ -241,16 +241,17 @@
             <aside class="col-span-12 lg:col-span-4 space-y-6">
                 <div
                     class="glass-card overflow-hidden rounded-3xl relative min-h-[160px] flex flex-col justify-end border-t border-white/20">
-                    <img id="bossAvatar" src="https://raw.githubusercontent.com/noh486951-droid/Artale_Raid/main/img/zakum.png"
-                        class="absolute inset-0 w-full h-full object-cover opacity-50 mix-blend-screen transition-all duration-700">
+                    <img id="bossAvatar" src="https://raw.githubusercontent.com/noh486951-droid/Artale_Raid/main/img/kressel.png"
+                        class="absolute inset-0 w-full h-full object-cover opacity-50 mix-blend-screen transition-all duration-700"
+                        onerror="this.style.visibility='hidden'">
                     <div class="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent"></div>
                     <div class="relative p-6">
                         <select id="raidSelect" onchange="updateUI()"
                             class="w-full bg-transparent text-2xl font-black outline-none cursor-pointer text-cyan-300 border-none drop-shadow-lg">
                             <option value="zakum">殘暴炎魔 (6人)</option>
-                            <option value="papu_n">普通拉圖斯</option>
                             <option value="papu_h">困難拉圖斯 (6人)</option>
                             <option value="horntail">暗黑龍王 (12人)</option>
+                            <option value="kressel">克雷塞爾 (6人)</option>
                         </select>
                     </div>
                 </div>
@@ -279,6 +280,13 @@
                     <h4 class="text-[10px] font-black text-pink-400 uppercase tracking-widest mb-3 italic"><i
                             class="fas fa-gift mr-1"></i>Loot Wishlist</h4>
                     <div id="wishlistBox" class="space-y-2 max-h-40 overflow-y-auto pr-2"></div>
+                </div>
+
+                <div class="glass-card p-5 rounded-3xl border-amber-500/20 bg-black/20">
+                    <h4 class="text-[10px] font-black text-amber-400 uppercase tracking-widest mb-3 italic"><i
+                            class="fas fa-repeat mr-1"></i>Weekly Runs (本週次數)</h4>
+                    <div id="runsSummary" class="text-[10px] text-slate-400 mb-2"></div>
+                    <div id="runsBox" class="space-y-2 max-h-40 overflow-y-auto pr-2"></div>
                 </div>
 
                 <div class="glass-card p-6 rounded-3xl space-y-5">
@@ -382,6 +390,14 @@
                 我想許願:</span>
             <select id="lootWishlist" class="bg-transparent text-white text-xs outline-none w-32 md:w-48">
                 <option value="">(無)</option>
+            </select>
+        </div>
+        <div class="flex items-center bg-black/50 border border-amber-500/30 rounded-lg px-3 py-2 mr-2">
+            <span class="text-amber-400 text-xs font-bold mr-2 whitespace-nowrap"><i class="fas fa-repeat"></i>
+                本週次數:</span>
+            <select id="weeklyRuns" class="bg-transparent text-white text-xs outline-none w-20">
+                <option value="7">7 次</option>
+                <option value="14">14 次</option>
             </select>
         </div>
         <button onclick="saveMySchedule(false)"
@@ -613,10 +629,16 @@
 
         const bossData = {
             zakum: { name: "殘暴炎魔 (6人)", img: "https://raw.githubusercontent.com/noh486951-droid/Artale_Raid/main/img/zakum.png", min: 6, req: ["法師", "黑騎"], bgColor: "#1f0606", loot: ["殘暴炎魔頭盔", "殘暴炎魔戒指箱", "克利思拳套"] },
-            papu_n: { name: "普通拉圖斯", img: "https://raw.githubusercontent.com/noh486951-droid/Artale_Raid/main/img/papu_n.png", min: 1, req: [], bgColor: "#020617", loot: ["異界靈魂", "發條鐘", "拉圖斯腰帶", "(技能書)無雙劍舞30", "(技能書)瞬步連擊30"] },
             papu_h: { name: "困難拉圖斯 (6人)", img: "https://raw.githubusercontent.com/noh486951-droid/Artale_Raid/main/img/papu_h.png", min: 6, req: ["法師", "黑騎"], bgColor: "#170b29", loot: ["拉圖斯寶箱", "(技能書)挑釁30", "(技能書)致命暗殺30", "(技能書)冰火連擊30"] },
-            horntail: { name: "暗黑龍王 (12人)", img: "https://raw.githubusercontent.com/noh486951-droid/Artale_Raid/main/img/horntail.png", min: 12, req: ["黑騎", "主教"], bgColor: "#041c13", loot: ["⚠️ 尚未開放，敬請期待"] }
+            horntail: { name: "暗黑龍王 (12人)", img: "https://raw.githubusercontent.com/noh486951-droid/Artale_Raid/main/img/horntail.png", min: 12, req: ["黑騎", "主教"], bgColor: "#041c13", loot: ["⚠️ 尚未開放，敬請期待"] },
+            kressel: { name: "克雷塞爾 (6人)", img: "https://raw.githubusercontent.com/noh486951-droid/Artale_Raid/main/img/kressel.png", min: 6, req: [], bgColor: "#041526", loot: ["克雷塞爾飾品箱", "楓葉祝福20"] }
         };
+
+        // 已下架的副本 key 仍需認得，否則舊資料會被誤判為舊格式
+        // 登入後預設選取的副本
+        const DEFAULT_RAID = "kressel";
+
+        const KNOWN_RAID_KEYS = [...Object.keys(bossData), "papu_n"];
 
         const fortunes = [
             { type: "大吉", text: "今日運勢極佳，點 10% 卷軸跟點 100% 一樣過，王裝絕對有你的份！", color: "text-red-400" },
@@ -700,8 +722,16 @@
                     </ul>
                 </div>
             `,
-            papu_n: `<div class="text-slate-400 text-center py-8">普通拉圖斯攻略建置中...</div>`,
-            horntail: `<div class="text-slate-400 text-center py-8">暗黑龍王攻略建置中...</div>`
+            horntail: `<div class="text-slate-400 text-center py-8">暗黑龍王攻略建置中...</div>`,
+            kressel: `
+                <div class="text-center py-6 space-y-4">
+                    <p class="text-slate-300 text-sm">克雷塞爾的完整戰術圖放在 Canva，點下方按鈕開啟。</p>
+                    <a href="https://www.canva.com/design/DAHVdgokOlQ/KvOUy4V_uFkFJbuYT3HKFQ/edit" target="_blank" rel="noopener noreferrer"
+                        class="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 px-6 py-3 rounded-xl font-black shadow-[0_0_15px_rgba(34,211,238,0.4)] transition-all">
+                        <i class="fas fa-external-link-alt"></i> 開啟克雷塞爾戰術圖
+                    </a>
+                    <p class="text-[10px] text-slate-500">會在新分頁開啟</p>
+                </div>`
         };
 
         function mulberry32(a) {
@@ -710,7 +740,7 @@
             }
         }
 
-        async function init() { console.log("Artale Raid Commander Pro V1.5.1 Loaded"); updateDates(); await fetchData(); }
+        async function init() { console.log("Artale Raid Commander Pro V1.5.2 Loaded"); updateDates(); await fetchData(); }
 
         async function fetchData() {
             try {
@@ -757,6 +787,7 @@
                 document.getElementById('mainApp').classList.remove('hidden');
                 setTimeout(() => document.getElementById('mainApp').style.opacity = '1', 50);
                 document.getElementById('displayUserName').innerText = currentUser;
+                document.getElementById('raidSelect').value = DEFAULT_RAID;
                 generateDailyFortune(); checkAdmin(); loadWebhookInputValue(); updateUI();
             }, 500);
         }
@@ -847,7 +878,9 @@
         function updateUI() {
             const raidKey = document.getElementById('raidSelect').value; const raidInfo = bossData[raidKey];
             document.getElementById('pageBg').style.backgroundColor = raidInfo.bgColor;
-            document.getElementById('bossAvatar').src = raidInfo.img;
+            const avatarEl = document.getElementById('bossAvatar');
+            avatarEl.style.visibility = 'visible';
+            avatarEl.src = raidInfo.img;
             document.getElementById('overlayToggleBtn').classList.toggle('hidden', raidKey !== 'papu_h');
             if (document.getElementById('raidNotes')) document.getElementById('raidNotes').innerText = `最低人數: ${raidInfo.min} 人\n必要職業: ${raidInfo.req.join('、') || '無特別限制'}`;
             document.getElementById('lootWishlist').innerHTML = `<option value="">(無)</option>` + raidInfo.loot.map(item => `<option value="${item}">${item}</option>`).join('');
@@ -859,12 +892,27 @@
             renderGrid();
         }
 
+        // 讀出某人在某副本登記的本週次數（未登記或休假回 null）
+        function getRuns(scheduleRow, raidKey) {
+            if (scheduleRow[2] === "OFF") return null;
+            try {
+                const parsed = JSON.parse(scheduleRow[2]);
+                return (parsed[raidKey] && parsed[raidKey].__runs__) || null;
+            } catch (e) { return null; }
+        }
+
+        function buildRunsMap(schedules, raidKey) {
+            const map = {};
+            schedules.forEach(s => { const r = getRuns(s, raidKey); if (r) map[s[1]] = r; });
+            return map;
+        }
+
         function updatePendingList() {
             const weekStr = document.getElementById('currentWeekRange').innerText; const raidKey = document.getElementById('raidSelect').value;
             const reportedSchedules = db.schedules.filter(s => s[0] === weekStr);
             const reportedNames = reportedSchedules.filter(s => {
                 if (s[2] === "OFF") return true;
-                try { const parsed = JSON.parse(s[2]); const isNewFormat = Object.keys(bossData).some(k => parsed[k] !== undefined); return parsed[raidKey] !== undefined || !isNewFormat; } catch (e) { return false; }
+                try { const parsed = JSON.parse(s[2]); const isNewFormat = KNOWN_RAID_KEYS.some(k => parsed[k] !== undefined); return parsed[raidKey] !== undefined || !isNewFormat; } catch (e) { return false; }
             }).map(s => s[1]);
             const pending = db.members.slice(1).map(m => m[0]).filter(n => !reportedNames.includes(n));
             document.getElementById('pendingList').innerHTML = pending.length === 0 ? '<span class="text-xs text-green-400 font-bold tracking-widest drop-shadow"><i class="fas fa-check-circle mr-1"></i>全體回報完畢</span>' : pending.map(p => `<span class="bg-red-950/50 text-red-300 border border-red-900/50 px-2 py-1 rounded text-[10px] shadow-sm">${p}</span>`).join('');
@@ -876,6 +924,13 @@
                 }
             });
             wishBox.innerHTML = wishes.length === 0 ? '<div class="text-[10px] text-slate-500 italic">目前無人許願</div>' : wishes.map(w => `<div class="text-[11px] bg-pink-900/20 border border-pink-500/20 px-2 py-1 rounded text-pink-200 mb-1 flex justify-between"><span>${w.name}</span> <span class="font-bold text-pink-400">${w.item}</span></div>`).join('');
+
+            const runsMap = buildRunsMap(reportedSchedules, raidKey);
+            const runNames = Object.keys(runsMap);
+            const c7 = runNames.filter(n => Number(runsMap[n]) === 7).length;
+            const c14 = runNames.filter(n => Number(runsMap[n]) === 14).length;
+            document.getElementById('runsSummary').innerHTML = runNames.length === 0 ? '' : `7 次：<span class="text-amber-300 font-bold">${c7}</span> 人　・　14 次：<span class="text-amber-300 font-bold">${c14}</span> 人`;
+            document.getElementById('runsBox').innerHTML = runNames.length === 0 ? '<div class="text-[10px] text-slate-500 italic">尚無人登記本週次數</div>' : runNames.map(n => `<div class="text-[11px] bg-amber-900/20 border border-amber-500/20 px-2 py-1 rounded text-amber-100 mb-1 flex justify-between"><span>${n}</span> <span class="font-bold text-amber-400">${runsMap[n]} 次</span></div>`).join('');
         }
 
         function renderGrid() {
@@ -884,6 +939,7 @@
             const weekSchedules = db.schedules.filter(s => s[0] === weekStr);
 
             const finalizedList = db.finalized.filter(f => f[0] === weekStr && f[1] === raidInfo.name).map(f => f[2]);
+            const runsMap = buildRunsMap(weekSchedules, raidKey);
 
             for (let h = 18; h <= 22; h++) {
                 [0, 30].forEach(m => {
@@ -899,7 +955,8 @@
                         if (isReporting && selectedTimes[cellId]) finalClass += " cell-editing"; else if (!isReporting && adminSelection === cellId) finalClass += " cell-admin-selected";
                         if (isReporting && !selectedTimes[cellId]) finalClass += " opacity-40";
 
-                        row += `<td><div id="${cellId}" data-names="${peeps.join(',')}" onclick="handleCellClick('${cellId}', '${timeStr}', '${day}')" class="cell ${finalClass}" title="人數: ${peeps.length}\n名單: ${peeps.join(', ')}">${peeps.length > 0 ? peeps.length : ''}</div></td>`;
+                        const peepsDetail = peeps.map(n => runsMap[n] ? `${n}(${runsMap[n]}次)` : `${n}(未登記)`);
+                        row += `<td><div id="${cellId}" data-names="${peeps.join(',')}" data-detail="${peepsDetail.join(', ')}" onclick="handleCellClick('${cellId}', '${timeStr}', '${day}')" class="cell ${finalClass}" title="人數: ${peeps.length}\n名單: ${peepsDetail.join(', ')}">${peeps.length > 0 ? peeps.length : ''}</div></td>`;
                     });
                     row += `</tr>`; body.innerHTML += row;
                 });
@@ -909,16 +966,17 @@
         function handleCellClick(id, time, day) {
             playSound('click');
             const cellEl = document.getElementById(id); const namesStr = cellEl ? cellEl.getAttribute('data-names') : ''; const namesArr = namesStr ? namesStr.split(',') : [];
+            const detailStr = (cellEl && cellEl.getAttribute('data-detail')) || namesArr.join(', ');
             if (isReporting) {
                 if (selectedTimes[id]) delete selectedTimes[id]; else selectedTimes[id] = true; renderGrid();
             } else {
                 if (currentUser === ADMIN_ID) {
-                    adminSelection = id; document.getElementById('selectedTimeLabel').innerHTML = `已選取：${day} ${time}<br><span class="text-[11px] text-cyan-300 font-bold">名單: ${namesArr.join(', ') || '無'}</span>`;
+                    adminSelection = id; document.getElementById('selectedTimeLabel').innerHTML = `已選取：${day} ${time}<br><span class="text-[11px] text-cyan-300 font-bold">名單: ${detailStr || '無'}</span>`;
                     document.getElementById('btnFinalize').disabled = false; 
                     if (document.getElementById('btnDropDistribute')) document.getElementById('btnDropDistribute').disabled = false;
                     renderGrid();
                 } else {
-                    alert(namesArr.length > 0 ? `📅 ${day} ${time} (${namesArr.length}人)\n\n報名名單：\n${namesArr.join(', ')}` : `📅 ${day} ${time}\n\n目前尚無人回報此時段。\n📝 若要填寫空檔，請先點擊上方的「回報此副本時間」按鈕！`);
+                    alert(namesArr.length > 0 ? `📅 ${day} ${time} (${namesArr.length}人)\n\n報名名單 (含本週次數)：\n${detailStr}` : `📅 ${day} ${time}\n\n目前尚無人回報此時段。\n📝 若要填寫空檔，請先點擊上方的「回報此副本時間」按鈕！`);
                 }
             }
         }
@@ -928,9 +986,10 @@
             isReporting = true; document.getElementById('btnStartReport').classList.add('hidden'); document.getElementById('reportActionBar').classList.remove('translate-y-full');
             selectedTimes = {}; globalMasterSchedule = {};
             const existing = db.schedules.find(s => s[0] === document.getElementById('currentWeekRange').innerText && s[1] === currentUser);
-            if (existing && existing[2] !== "OFF") { try { let parsed = JSON.parse(existing[2]); const isNewFormat = Object.keys(bossData).some(k => parsed[k] !== undefined); if (!isNewFormat) { globalMasterSchedule = { [raidKey]: parsed }; } else { globalMasterSchedule = parsed; } } catch (e) { } }
+            if (existing && existing[2] !== "OFF") { try { let parsed = JSON.parse(existing[2]); const isNewFormat = KNOWN_RAID_KEYS.some(k => parsed[k] !== undefined); if (!isNewFormat) { globalMasterSchedule = { [raidKey]: parsed }; } else { globalMasterSchedule = parsed; } } catch (e) { } }
             selectedTimes = globalMasterSchedule[raidKey] || {};
             document.getElementById('lootWishlist').value = selectedTimes.__wish__ ? selectedTimes.__wish__ : "";
+            document.getElementById('weeklyRuns').value = selectedTimes.__runs__ ? String(selectedTimes.__runs__) : "7";
             renderGrid();
         }
 
@@ -948,6 +1007,8 @@
             if (!isOff) {
                 const wishVal = document.getElementById('lootWishlist').value; 
                 if (wishVal) selectedTimes.__wish__ = wishVal; else delete selectedTimes.__wish__;
+                const runsVal = document.getElementById('weeklyRuns').value;
+                if (runsVal) selectedTimes.__runs__ = Number(runsVal); else delete selectedTimes.__runs__;
                 globalMasterSchedule[raidKey] = selectedTimes; 
                 finalDataStr = JSON.stringify(globalMasterSchedule);
             }
@@ -1359,7 +1420,7 @@
                 if (!img.src || img.src === window.location.href || img.getAttribute('data-raid-key') !== raidKey) {
                     // 根據當前選擇預載對應地圖（如有）
                     let targetSrc = "";
-                    if (raidKey === 'papu_h' || raidKey === 'papu_n') targetSrc = "./img/papu_map.png";
+                    if (raidKey === 'papu_h') targetSrc = "./img/papu_map.png";
                     else if (raidKey === 'zakum') targetSrc = "./img/zakum.png";
                     else if (raidKey === 'horntail') targetSrc = "./img/horntail.png";
                     
@@ -1452,7 +1513,7 @@
 
             // 如果圖片還沒載入，根據目前選擇的副本自動載入對應參考圖
             if (!src || src === window.location.href || img.getAttribute('data-raid-key') !== raidKey) {
-                if (raidKey === 'papu_h' || raidKey === 'papu_n') src = "https://raw.githubusercontent.com/noh486951-droid/Artale_Raid/main/img/papu_map.png";
+                if (raidKey === 'papu_h') src = "https://raw.githubusercontent.com/noh486951-droid/Artale_Raid/main/img/papu_map.png";
                 else if (raidKey === 'zakum') src = "https://raw.githubusercontent.com/noh486951-droid/Artale_Raid/main/img/zakum.png";
                 else if (raidKey === 'horntail') src = "https://raw.githubusercontent.com/noh486951-droid/Artale_Raid/main/img/horntail.png";
 
