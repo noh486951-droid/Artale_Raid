@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Artale Raid Commander Pro V1.5.8</title>
+    <title>Artale Raid Commander Pro V1.5.9</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -137,7 +137,7 @@
             </div>
             <h1 class="text-2xl font-black italic tracking-tighter text-cyan-400 font-cyber mb-1">ARTALE</h1>
             <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Raid Commander</h2>
-            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.5.8</div>
+            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.5.9</div>
             <div id="loginLoading" class="text-cyan-500 text-sm font-bold animate-pulse"><i
                     class="fas fa-circle-notch fa-spin mr-2"></i>連線至資料庫中...</div>
             <div id="loginForm" class="hidden space-y-4">
@@ -172,7 +172,7 @@
                 <div>
                     <h1
                         class="text-3xl font-black italic tracking-tighter text-cyan-400 font-cyber drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
-                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.5.8</span></h1>
+                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.5.9</span></h1>
                     <div id="currentWeekRange"
                         class="text-[10px] text-cyan-100 font-cyber uppercase tracking-widest mt-1 opacity-70">System
                         Online</div>
@@ -475,6 +475,7 @@
                             <th class="p-3 text-center">總參戰次數</th>
                             <th class="p-3 text-center border-l border-amber-500/20">總獲得掉落物</th>
                             <th class="p-3 text-center">幸運掉落率</th>
+                            <th class="p-3 text-center border-l border-amber-500/20">連續槓龜</th>
                             <th class="p-3 rounded-tr-lg border-l border-amber-500/20 w-1/2">掉落明細</th>
                         </tr>
                     </thead>
@@ -780,7 +781,7 @@
             }
         }
 
-        async function init() { console.log("Artale Raid Commander Pro V1.5.8 Loaded"); updateDates(); await fetchData(); }
+        async function init() { console.log("Artale Raid Commander Pro V1.5.9 Loaded"); updateDates(); await fetchData(); }
 
         // 統一的抓資料管道。Google Apps Script 有相當比例的機率會回傳 HTML
         // 錯誤頁而不是 JSON（實測約每五次中一次），所以這裡會自動重試，
@@ -1572,21 +1573,102 @@
             }).sort((a, b) => b.rate - a.rate || b.runs - a.runs);
         }
 
-        // 開寶率分級，越低越好笑
+        // 開寶率分級。Artale 本來就很難掉，所以 10% 以上已經算佛心了。
         function raidRateFlavor(rate, runs) {
             if (runs < 3) return { text: '場次還太少，再多打幾場才看得出來', cls: 'text-slate-500' };
             if (rate === 0) return { text: '掛蛋。這王是不是根本沒有掉落表？', cls: 'text-red-400' };
             if (rate < 5) return { text: '打這個王越打越窮，建議改行賣水果 🍊', cls: 'text-red-400' };
-            if (rate < 10) return { text: '小氣到有剩，看得到吃不到', cls: 'text-orange-400' };
-            if (rate < 20) return { text: '勉強算有在給東西', cls: 'text-yellow-400' };
-            if (rate < 40) return { text: '還算大方，值得排班', cls: 'text-emerald-400' };
-            return { text: '佛心來著，快去多打幾場', cls: 'text-cyan-400' };
+            if (rate < 10) return { text: '還算大方，值得排班', cls: 'text-emerald-400' };
+            return { text: '佛心來著，快去多打幾場 ✨', cls: 'text-cyan-400' };
+        }
+
+        // 把「2026/9/14 - 2026/9/20」+「Wed-19:00」換算成那一場的實際時間點。
+        // 連續槓龜要按時間順序往回數，所以必須排得出先後。
+        function runTimestamp(weekStr, slot) {
+            const start = parseLooseDate(weekStr);
+            if (!start) return null;
+            const order = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+            const m = String(slot).match(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)-(\d{1,2}):(\d{2})/);
+            const d = new Date(start.getTime());
+            if (m) {
+                d.setDate(start.getDate() + order[m[1]]);
+                d.setHours(Number(m[2]), Number(m[3]), 0, 0);
+            }
+            return d;
+        }
+
+        // 統計期間內、已去重、依時間排好的場次
+        function statsRuns() {
+            return uniqueFinalizedRuns(db.finalized)
+                .filter(f => isWithinStatsPeriod(f[0]))
+                .map(f => ({
+                    week: String(f[0]).trim(),
+                    raid: String(f[1]).trim(),
+                    slot: String(f[2]).trim(),
+                    players: String(f[3] == null ? '' : f[3]).split(',').map(x => x.trim()).filter(Boolean),
+                    ts: runTimestamp(f[0], f[2])
+                }))
+                .filter(r => r.ts)
+                .sort((a, b) => a.ts - b.ts);
+        }
+
+        // 建索引：哪一場有掉東西、某人在某場有沒有拿到
+        function dropIndex() {
+            const byRun = {}, byRunPlayer = {};
+            dropDataRows(db.drops).filter(d => isWithinStatsPeriod(d[0])).forEach(d => {
+                if (!d[3] || d[3] === '無') return;
+                const week = d[4], slot = d[5];
+                if (!week || !slot) return; // 舊資料沒有場次歸屬，無法納入連續計算
+                byRun[`${week}|${slot}`] = true;
+                byRunPlayer[`${week}|${slot}|${String(d[2]).trim()}`] = true;
+            });
+            return { byRun, byRunPlayer };
+        }
+
+        // 連續槓龜：從最近一場往回數，連續幾場沒拿到東西
+        function computeDryStreaks() {
+            const runs = statsRuns();
+            const idx = dropIndex();
+
+            const raidRuns = {}, playerRuns = {};
+            runs.forEach(r => {
+                (raidRuns[r.raid] = raidRuns[r.raid] || []).push(r);
+                r.players.forEach(p => { (playerRuns[p] = playerRuns[p] || []).push(r); });
+            });
+
+            const countBack = (list, hit) => {
+                let n = 0;
+                for (let i = list.length - 1; i >= 0; i--) {
+                    if (hit(list[i])) break;
+                    n++;
+                }
+                return n;
+            };
+
+            const byRaid = {}, byPlayer = {};
+            Object.keys(raidRuns).forEach(raid => {
+                byRaid[raid] = countBack(raidRuns[raid], r => idx.byRun[`${r.week}|${r.slot}`]);
+            });
+            Object.keys(playerRuns).forEach(p => {
+                byPlayer[p] = countBack(playerRuns[p], r => idx.byRunPlayer[`${r.week}|${r.slot}|${p}`]);
+            });
+            return { byRaid, byPlayer };
+        }
+
+        // 槓龜場次越多顯示越淒慘
+        function dryStreakBadge(n) {
+            if (!n) return '<span class="text-slate-600">—</span>';
+            if (n >= 15) return `<span class="text-red-400 font-black">💀 ${n} 場</span>`;
+            if (n >= 8) return `<span class="text-red-400 font-bold">🐢 ${n} 場</span>`;
+            if (n >= 3) return `<span class="text-orange-400 font-bold">${n} 場</span>`;
+            return `<span class="text-slate-400">${n} 場</span>`;
         }
 
         function renderRaidStats() {
             const box = document.getElementById('raidStatsBody');
             if (!box) return;
             const stats = computeRaidStats();
+            const dry = computeDryStreaks();
             if (stats.length === 0) {
                 box.innerHTML = '<div class="text-[11px] text-slate-500 italic py-2">統計期間內尚無已發布的出團場次</div>';
                 return;
@@ -1600,6 +1682,7 @@
                             <span class="font-cyber text-lg ${s.rate > 0 ? 'text-emerald-400' : 'text-slate-500'}">${s.rate.toFixed(1)}%</span>
                         </div>
                         <div class="text-[10px] text-slate-400 mt-1">出團 ${s.runs} 場　・　開寶 ${s.looted} 場　・　共 ${s.items} 件</div>
+                        ${(dry.byRaid[s.raid] || 0) >= 3 ? `<div class="text-[10px] mt-1 text-red-300">🐢 這王已經連續 <span class="font-black">${dry.byRaid[s.raid]}</span> 場沒給東西了</div>` : ''}
                         <div class="text-[10px] mt-1 italic ${f.cls}">${f.text}</div>
                     </div>`;
             }).join('');
@@ -1636,6 +1719,7 @@
                 }
             });
 
+            const dry = computeDryStreaks();
             const sortedStats = Object.values(stats).sort((a, b) => b.dropCount - a.dropCount || b.runs - a.runs);
 
             tableBody.innerHTML = sortedStats.map(s => {
@@ -1646,6 +1730,7 @@
                         <td class="p-3 text-center text-white text-lg font-cyber shadow-sm">${s.runs}</td>
                         <td class="p-3 text-center border-l border-amber-500/10"><span class="bg-amber-900/40 text-amber-400 px-3 py-1 rounded-lg font-black text-lg">${s.dropCount}</span></td>
                         <td class="p-3 text-center font-cyber text-lg ${s.dropCount > 0 ? 'text-emerald-400 drop-shadow' : 'text-slate-500'}">${rate}</td>
+                        <td class="p-3 text-center text-xs border-l border-amber-500/10">${dryStreakBadge(dry.byPlayer[s.name] || 0)}</td>
                         <td class="p-3 border-l border-amber-500/10 text-[10px] text-slate-400">
                             ${s.items.length > 0 ? s.items.map(i => `<span class="bg-pink-900/30 border border-pink-500/20 text-pink-300 px-2 py-1 rounded-md mr-1 inline-block mb-1 shadow-sm">${i}</span>`).join('') : '<span class="italic opacity-50">尚未獲得任何傳奇裝備</span>'}
                         </td>
