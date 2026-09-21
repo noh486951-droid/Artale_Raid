@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Artale Raid Commander Pro V1.5.7</title>
+    <title>Artale Raid Commander Pro V1.5.8</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -137,7 +137,7 @@
             </div>
             <h1 class="text-2xl font-black italic tracking-tighter text-cyan-400 font-cyber mb-1">ARTALE</h1>
             <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Raid Commander</h2>
-            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.5.7</div>
+            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.5.8</div>
             <div id="loginLoading" class="text-cyan-500 text-sm font-bold animate-pulse"><i
                     class="fas fa-circle-notch fa-spin mr-2"></i>連線至資料庫中...</div>
             <div id="loginForm" class="hidden space-y-4">
@@ -172,7 +172,7 @@
                 <div>
                     <h1
                         class="text-3xl font-black italic tracking-tighter text-cyan-400 font-cyber drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
-                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.5.7</span></h1>
+                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.5.8</span></h1>
                     <div id="currentWeekRange"
                         class="text-[10px] text-cyan-100 font-cyber uppercase tracking-widest mt-1 opacity-70">System
                         Online</div>
@@ -482,6 +482,11 @@
                         <!-- 內容動態生成 -->
                     </tbody>
                 </table>
+
+                <h4 class="text-[10px] font-black text-amber-400 uppercase tracking-widest mt-6 mb-3 italic"><i
+                        class="fas fa-dungeon mr-1"></i>Boss Drop Rate (副本開寶率)</h4>
+                <div class="text-[10px] text-slate-500 mb-2">開寶率 ＝ 有掉東西的場次 ÷ 總場次</div>
+                <div id="raidStatsBody"></div>
             </div>
         </div>
     </div>
@@ -775,7 +780,7 @@
             }
         }
 
-        async function init() { console.log("Artale Raid Commander Pro V1.5.7 Loaded"); updateDates(); await fetchData(); }
+        async function init() { console.log("Artale Raid Commander Pro V1.5.8 Loaded"); updateDates(); await fetchData(); }
 
         // 統一的抓資料管道。Google Apps Script 有相當比例的機率會回傳 HTML
         // 錯誤頁而不是 JSON（實測約每五次中一次），所以這裡會自動重試，
@@ -1527,10 +1532,84 @@
             return out;
         }
 
+        // 副本開寶率 = 有掉東西的場次 ÷ 總場次。
+        // 需要每筆掉落知道自己屬於哪一場（Drops 的第 5、6 欄：週次與時段）。
+        // 舊資料沒有這兩欄，無法歸戶，只計入件數不計入開寶場次。
+        function computeRaidStats() {
+            const runsByRaid = {};      // 副本 -> Set(場次key)
+            const lootedByRaid = {};    // 副本 -> Set(有掉落的場次key)
+            const itemsByRaid = {};     // 副本 -> 掉落件數
+            const runKey = (week, time) => `${week}|${time}`;
+
+            uniqueFinalizedRuns(db.finalized).filter(f => isWithinStatsPeriod(f[0])).forEach(f => {
+                const raid = String(f[1]).trim();
+                if (!runsByRaid[raid]) runsByRaid[raid] = new Set();
+                runsByRaid[raid].add(runKey(f[0], f[2]));
+            });
+
+            dropDataRows(db.drops).filter(d => isWithinStatsPeriod(d[0])).forEach(d => {
+                const raid = String(d[1]).trim();
+                const item = d[3];
+                if (!item || item === "無") return;
+                itemsByRaid[raid] = (itemsByRaid[raid] || 0) + 1;
+                const week = d[4], slot = d[5];
+                if (week && slot) {
+                    if (!lootedByRaid[raid]) lootedByRaid[raid] = new Set();
+                    lootedByRaid[raid].add(runKey(week, slot));
+                }
+            });
+
+            return Object.keys(runsByRaid).map(raid => {
+                const runs = runsByRaid[raid].size;
+                const looted = lootedByRaid[raid] ? lootedByRaid[raid].size : 0;
+                return {
+                    raid: raid,
+                    runs: runs,
+                    looted: looted,
+                    items: itemsByRaid[raid] || 0,
+                    rate: runs > 0 ? (looted / runs) * 100 : 0
+                };
+            }).sort((a, b) => b.rate - a.rate || b.runs - a.runs);
+        }
+
+        // 開寶率分級，越低越好笑
+        function raidRateFlavor(rate, runs) {
+            if (runs < 3) return { text: '場次還太少，再多打幾場才看得出來', cls: 'text-slate-500' };
+            if (rate === 0) return { text: '掛蛋。這王是不是根本沒有掉落表？', cls: 'text-red-400' };
+            if (rate < 5) return { text: '打這個王越打越窮，建議改行賣水果 🍊', cls: 'text-red-400' };
+            if (rate < 10) return { text: '小氣到有剩，看得到吃不到', cls: 'text-orange-400' };
+            if (rate < 20) return { text: '勉強算有在給東西', cls: 'text-yellow-400' };
+            if (rate < 40) return { text: '還算大方，值得排班', cls: 'text-emerald-400' };
+            return { text: '佛心來著，快去多打幾場', cls: 'text-cyan-400' };
+        }
+
+        function renderRaidStats() {
+            const box = document.getElementById('raidStatsBody');
+            if (!box) return;
+            const stats = computeRaidStats();
+            if (stats.length === 0) {
+                box.innerHTML = '<div class="text-[11px] text-slate-500 italic py-2">統計期間內尚無已發布的出團場次</div>';
+                return;
+            }
+            box.innerHTML = stats.map(s => {
+                const f = raidRateFlavor(s.rate, s.runs);
+                return `
+                    <div class="bg-black/40 border border-amber-500/20 rounded-xl p-3 mb-2">
+                        <div class="flex items-center justify-between gap-3 flex-wrap">
+                            <span class="text-amber-200 text-xs font-bold">${s.raid}</span>
+                            <span class="font-cyber text-lg ${s.rate > 0 ? 'text-emerald-400' : 'text-slate-500'}">${s.rate.toFixed(1)}%</span>
+                        </div>
+                        <div class="text-[10px] text-slate-400 mt-1">出團 ${s.runs} 場　・　開寶 ${s.looted} 場　・　共 ${s.items} 件</div>
+                        <div class="text-[10px] mt-1 italic ${f.cls}">${f.text}</div>
+                    </div>`;
+            }).join('');
+        }
+
         function renderLeaderboard() {
             const tableBody = document.getElementById('leaderboardTableBody');
             const periodEl = document.getElementById('statsPeriodLabel');
             if (periodEl) periodEl.innerText = `統計期間：${STATS_START_LABEL} 起（克雷塞爾上線後重新計算）`;
+            renderRaidStats();
             if (!db.drops) db.drops = [];
 
             const stats = {};
@@ -1737,6 +1816,7 @@
 
             const raidKey = document.getElementById('raidSelect').value;
             const raidName = bossData[raidKey].name;
+            const weekStr = document.getElementById('currentWeekRange').innerText;
 
             const records = [];
             currentDropParticipants.forEach((p, idx) => {
@@ -1744,7 +1824,9 @@
                 if (!box) return;
                 box.querySelectorAll('.drop-item').forEach(sel => {
                     if (sel.value && sel.value !== "無") {
-                        records.push({ player: p, item: sel.value, boss: raidName });
+                        // 帶上週次與時段，這筆掉落才能對應到「哪一場」，
+                        // 副本開寶率與週卡片都需要這個對應關係
+                        records.push({ player: p, item: sel.value, boss: raidName, week: weekStr, finalTime: adminSelection });
                     }
                 });
             });
