@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Artale Raid Commander Pro V1.5.9</title>
+    <title>Artale Raid Commander Pro V1.6.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -137,7 +137,7 @@
             </div>
             <h1 class="text-2xl font-black italic tracking-tighter text-cyan-400 font-cyber mb-1">ARTALE</h1>
             <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Raid Commander</h2>
-            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.5.9</div>
+            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.6.0</div>
             <div id="loginLoading" class="text-cyan-500 text-sm font-bold animate-pulse"><i
                     class="fas fa-circle-notch fa-spin mr-2"></i>連線至資料庫中...</div>
             <div id="loginForm" class="hidden space-y-4">
@@ -172,7 +172,7 @@
                 <div>
                     <h1
                         class="text-3xl font-black italic tracking-tighter text-cyan-400 font-cyber drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
-                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.5.9</span></h1>
+                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.6.0</span></h1>
                     <div id="currentWeekRange"
                         class="text-[10px] text-cyan-100 font-cyber uppercase tracking-widest mt-1 opacity-70">System
                         Online</div>
@@ -472,7 +472,7 @@
                     <thead class="bg-amber-900/30 text-amber-300 text-[10px] uppercase font-bold sticky top-0 backdrop-blur-sm">
                         <tr>
                             <th class="p-3 rounded-tl-lg">特務代號</th>
-                            <th class="p-3 text-center">總參戰次數</th>
+                            <th class="p-3 text-center">總場次</th>
                             <th class="p-3 text-center border-l border-amber-500/20">總獲得掉落物</th>
                             <th class="p-3 text-center">幸運掉落率</th>
                             <th class="p-3 text-center border-l border-amber-500/20">連續槓龜</th>
@@ -781,7 +781,7 @@
             }
         }
 
-        async function init() { console.log("Artale Raid Commander Pro V1.5.9 Loaded"); updateDates(); await fetchData(); }
+        async function init() { console.log("Artale Raid Commander Pro V1.6.0 Loaded"); updateDates(); await fetchData(); }
 
         // 統一的抓資料管道。Google Apps Script 有相當比例的機率會回傳 HTML
         // 錯誤頁而不是 JSON（實測約每五次中一次），所以這裡會自動重試，
@@ -1499,6 +1499,16 @@
         const STATS_START = new Date(2026, 8, 14); // 2026/9/14，月份從 0 起算
         const STATS_START_LABEL = "2026/9/14";
 
+        // 一次「發布 MISSION」代表全員各打 7 場，所以 6 人出團就是 42 場次。
+        // 掉寶率的分母是場次，不是發布次數。
+        const RUNS_PER_MISSION = 7;
+
+        // 連續槓龜門檻（單位：場次）。Artale 掉寶率約 1~2%，
+        // 平均要 50~100 場才會掉一次，所以門檻必須拉到這個量級才有意義。
+        const DRY_MILD = 50;
+        const DRY_BAD = 100;
+        const DRY_DOOM = 200;
+
         // finalized 的週次是「2026/9/14 - 2026/9/20」，drops 的時間戳是
         // 「2026/4/1 上午11:46:07」，兩者都取字串裡的第一個日期來比。
         function parseLooseDate(str) {
@@ -1537,15 +1547,14 @@
         // 需要每筆掉落知道自己屬於哪一場（Drops 的第 5、6 欄：週次與時段）。
         // 舊資料沒有這兩欄，無法歸戶，只計入件數不計入開寶場次。
         function computeRaidStats() {
-            const runsByRaid = {};      // 副本 -> Set(場次key)
-            const lootedByRaid = {};    // 副本 -> Set(有掉落的場次key)
+            const runsByRaid = {};      // 副本 -> 總場次（人次）
+            const missionsByRaid = {};  // 副本 -> 發布次數
             const itemsByRaid = {};     // 副本 -> 掉落件數
-            const runKey = (week, time) => `${week}|${time}`;
 
-            uniqueFinalizedRuns(db.finalized).filter(f => isWithinStatsPeriod(f[0])).forEach(f => {
-                const raid = String(f[1]).trim();
-                if (!runsByRaid[raid]) runsByRaid[raid] = new Set();
-                runsByRaid[raid].add(runKey(f[0], f[2]));
+            statsRuns().forEach(r => {
+                // 一次發布 = 每位參戰者各打 RUNS_PER_MISSION 場
+                runsByRaid[r.raid] = (runsByRaid[r.raid] || 0) + r.players.length * RUNS_PER_MISSION;
+                missionsByRaid[r.raid] = (missionsByRaid[r.raid] || 0) + 1;
             });
 
             dropDataRows(db.drops).filter(d => isWithinStatsPeriod(d[0])).forEach(d => {
@@ -1553,32 +1562,29 @@
                 const item = d[3];
                 if (!item || item === "無") return;
                 itemsByRaid[raid] = (itemsByRaid[raid] || 0) + 1;
-                const week = d[4], slot = d[5];
-                if (week && slot) {
-                    if (!lootedByRaid[raid]) lootedByRaid[raid] = new Set();
-                    lootedByRaid[raid].add(runKey(week, slot));
-                }
             });
 
             return Object.keys(runsByRaid).map(raid => {
-                const runs = runsByRaid[raid].size;
-                const looted = lootedByRaid[raid] ? lootedByRaid[raid].size : 0;
+                const runs = runsByRaid[raid];
+                const items = itemsByRaid[raid] || 0;
                 return {
                     raid: raid,
                     runs: runs,
-                    looted: looted,
-                    items: itemsByRaid[raid] || 0,
-                    rate: runs > 0 ? (looted / runs) * 100 : 0
+                    missions: missionsByRaid[raid] || 0,
+                    items: items,
+                    rate: runs > 0 ? (items / runs) * 100 : 0
                 };
             }).sort((a, b) => b.rate - a.rate || b.runs - a.runs);
         }
 
-        // 開寶率分級。Artale 本來就很難掉，所以 10% 以上已經算佛心了。
+        // 開寶率 = 掉落件數 ÷ 總場次。分母是場次（人次）不是發布次數，
+        // 所以數字本來就落在個位數百分比，級距要照這個量級設。
         function raidRateFlavor(rate, runs) {
-            if (runs < 3) return { text: '場次還太少，再多打幾場才看得出來', cls: 'text-slate-500' };
+            if (runs < RUNS_PER_MISSION * 3) return { text: '場次還太少，再多打幾場才看得出來', cls: 'text-slate-500' };
             if (rate === 0) return { text: '掛蛋。這王是不是根本沒有掉落表？', cls: 'text-red-400' };
-            if (rate < 5) return { text: '打這個王越打越窮，建議改行賣水果 🍊', cls: 'text-red-400' };
-            if (rate < 10) return { text: '還算大方，值得排班', cls: 'text-emerald-400' };
+            if (rate < 1) return { text: '打這個王越打越窮，建議改行賣水果 🍊', cls: 'text-red-400' };
+            if (rate < 2) return { text: '小氣到有剩，看得到吃不到', cls: 'text-orange-400' };
+            if (rate < 5) return { text: '還算大方，值得排班', cls: 'text-emerald-400' };
             return { text: '佛心來著，快去多打幾場 ✨', cls: 'text-cyan-400' };
         }
 
@@ -1636,21 +1642,25 @@
                 r.players.forEach(p => { (playerRuns[p] = playerRuns[p] || []).push(r); });
             });
 
-            const countBack = (list, hit) => {
+            // 從最近一場往回累加，直到遇到有掉東西的那一場為止
+            const countBack = (list, hit, weight) => {
                 let n = 0;
                 for (let i = list.length - 1; i >= 0; i--) {
                     if (hit(list[i])) break;
-                    n++;
+                    n += weight(list[i]);
                 }
                 return n;
             };
 
+            // 回傳的單位是「場次」：王累計全隊人次，個人則是自己打的場數
             const byRaid = {}, byPlayer = {};
             Object.keys(raidRuns).forEach(raid => {
-                byRaid[raid] = countBack(raidRuns[raid], r => idx.byRun[`${r.week}|${r.slot}`]);
+                byRaid[raid] = countBack(raidRuns[raid], r => idx.byRun[`${r.week}|${r.slot}`],
+                    r => r.players.length * RUNS_PER_MISSION);
             });
             Object.keys(playerRuns).forEach(p => {
-                byPlayer[p] = countBack(playerRuns[p], r => idx.byRunPlayer[`${r.week}|${r.slot}|${p}`]);
+                byPlayer[p] = countBack(playerRuns[p], r => idx.byRunPlayer[`${r.week}|${r.slot}|${p}`],
+                    () => RUNS_PER_MISSION);
             });
             return { byRaid, byPlayer };
         }
@@ -1658,9 +1668,9 @@
         // 槓龜場次越多顯示越淒慘
         function dryStreakBadge(n) {
             if (!n) return '<span class="text-slate-600">—</span>';
-            if (n >= 15) return `<span class="text-red-400 font-black">💀 ${n} 場</span>`;
-            if (n >= 8) return `<span class="text-red-400 font-bold">🐢 ${n} 場</span>`;
-            if (n >= 3) return `<span class="text-orange-400 font-bold">${n} 場</span>`;
+            if (n >= DRY_DOOM) return `<span class="text-red-400 font-black">💀 ${n} 場</span>`;
+            if (n >= DRY_BAD) return `<span class="text-red-400 font-bold">🐢 ${n} 場</span>`;
+            if (n >= DRY_MILD) return `<span class="text-orange-400 font-bold">${n} 場</span>`;
             return `<span class="text-slate-400">${n} 場</span>`;
         }
 
@@ -1679,10 +1689,10 @@
                     <div class="bg-black/40 border border-amber-500/20 rounded-xl p-3 mb-2">
                         <div class="flex items-center justify-between gap-3 flex-wrap">
                             <span class="text-amber-200 text-xs font-bold">${s.raid}</span>
-                            <span class="font-cyber text-lg ${s.rate > 0 ? 'text-emerald-400' : 'text-slate-500'}">${s.rate.toFixed(1)}%</span>
+                            <span class="font-cyber text-lg ${s.rate > 0 ? 'text-emerald-400' : 'text-slate-500'}">${s.rate.toFixed(2)}%</span>
                         </div>
-                        <div class="text-[10px] text-slate-400 mt-1">出團 ${s.runs} 場　・　開寶 ${s.looted} 場　・　共 ${s.items} 件</div>
-                        ${(dry.byRaid[s.raid] || 0) >= 3 ? `<div class="text-[10px] mt-1 text-red-300">🐢 這王已經連續 <span class="font-black">${dry.byRaid[s.raid]}</span> 場沒給東西了</div>` : ''}
+                        <div class="text-[10px] text-slate-400 mt-1">出團 ${s.missions} 次　・　共 ${s.runs} 場次　・　掉落 ${s.items} 件</div>
+                        ${(dry.byRaid[s.raid] || 0) >= DRY_MILD ? `<div class="text-[10px] mt-1 text-red-300">🐢 這王已經連續 <span class="font-black">${dry.byRaid[s.raid]}</span> 場沒給東西了</div>` : ''}
                         <div class="text-[10px] mt-1 italic ${f.cls}">${f.text}</div>
                     </div>`;
             }).join('');
@@ -1705,7 +1715,7 @@
                 if (participantsStr) {
                     participantsStr.split(",").forEach(p => {
                         const name = String(p).trim();
-                        if (stats[name]) stats[name].runs++;
+                        if (stats[name]) stats[name].runs += RUNS_PER_MISSION;
                     });
                 }
             });
