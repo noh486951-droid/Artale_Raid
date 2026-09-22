@@ -323,8 +323,15 @@
                         <p class="text-[10px] font-black text-indigo-300 uppercase tracking-widest mb-2"><i class="fab fa-discord mr-1"></i>Discord Webhook 設定</p>
                         <input type="text" id="webhookInput" placeholder="請貼上 Discord Webhook URL"
                             class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-[11px] outline-none focus:border-indigo-400 text-white mb-2">
-                        <button onclick="saveWebhookUrl()"
-                            class="w-full bg-indigo-700 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-[11px] font-black transition-all"><i class="fas fa-save mr-1"></i>儲存 Webhook</button>
+                        <div class="flex gap-2">
+                            <button onclick="saveWebhookUrl()"
+                                class="flex-1 bg-indigo-700 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-[11px] font-black transition-all"><i class="fas fa-save mr-1"></i>儲存</button>
+                            <button onclick="testWebhook()"
+                                class="flex-1 bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[11px] font-black transition-all"><i class="fas fa-paper-plane mr-1"></i>測試發送</button>
+                            <button onclick="clearWebhookUrl()" title="清除自己儲存的，改回系統預設"
+                                class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-[11px] font-black transition-all"><i class="fas fa-rotate-left"></i></button>
+                        </div>
+                        <p id="webhookSource" class="text-[10px] text-slate-500 mt-1.5 text-center"></p>
                         <p id="webhookStatus" class="text-[10px] text-slate-500 mt-1 text-center"></p>
                     </div>
                 </div>
@@ -1352,14 +1359,21 @@
                         timestamp: new Date().toISOString()
                     }]
                 };
+                // 這裡原本不檢查回應，Discord 失敗是完全靜默的，
+                // 導致 webhook 失效時沒人發現，只有 LINE 收得到。
                 try {
-                    await fetch(webhookUrl, {
+                    const res = await fetch(webhookUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(discordPayload)
                     });
+                    if (!res.ok) {
+                        console.error("Discord 傳送失敗:", res.status, await res.text());
+                        showToast(`⚠️ Discord 通知失敗（${res.status}）${res.status === 404 ? '：Webhook 已失效' : ''}，LINE 不受影響`, 'error');
+                    }
                 } catch (error) {
                     console.error("Discord 傳送失敗:", error);
+                    showToast('⚠️ Discord 通知送不出去，LINE 不受影響', 'error');
                 }
             }
 
@@ -1372,17 +1386,81 @@
             return localStorage.getItem('artale_dc_webhook') || DEFAULT_WEBHOOK_URL;
         }
 
+        // Discord 的桌面版依版本會給出不同網域：
+        //   discord.com / ptb.discord.com / canary.discord.com / discordapp.com
+        // 四種都是同一個 API，一律接受並正規化成 discord.com。
+        function normalizeWebhookUrl(raw) {
+            const url = String(raw || '').trim();
+            const m = url.match(/^https:\/\/(?:ptb\.|canary\.)?discord(?:app)?\.com\/api\/webhooks\/(\d+)\/([\w-]+)/);
+            if (!m) return null;
+            return `https://discord.com/api/webhooks/${m[1]}/${m[2]}`;
+        }
+
         function saveWebhookUrl() {
-            const url = document.getElementById('webhookInput').value.trim();
-            if (!url.startsWith('https://discord.com/api/webhooks/')) {
-                document.getElementById('webhookStatus').innerHTML = '<span class="text-red-400">⚠️ 網址格式不正確，請重新貼上 Discord Webhook URL</span>';
+            const raw = document.getElementById('webhookInput').value;
+            const statusEl = document.getElementById('webhookStatus');
+            const url = normalizeWebhookUrl(raw);
+            if (!url) {
+                statusEl.innerHTML = '<span class="text-red-400">⚠️ 網址格式不正確。應長得像 https://discord.com/api/webhooks/數字/英數字串</span>';
                 return;
             }
             localStorage.setItem('artale_dc_webhook', url);
-            document.getElementById('webhookStatus').innerHTML = '<span class="text-green-400">✅ Webhook 已儲存！</span>';
+            document.getElementById('webhookInput').value = url;
+            statusEl.innerHTML = '<span class="text-green-400">✅ 已儲存，建議按下方「測試發送」確認</span>';
+            renderWebhookSource();
+        }
+
+        // 清掉自己存的那組，改回程式碼裡的預設值。
+        // 舊的失效網址留在 localStorage 會一直蓋過預設值，是很難發現的坑。
+        function clearWebhookUrl() {
+            playSound('click');
+            try { localStorage.removeItem('artale_dc_webhook'); } catch (e) { }
+            document.getElementById('webhookInput').value = DEFAULT_WEBHOOK_URL;
+            document.getElementById('webhookStatus').innerHTML = '<span class="text-cyan-400">已清除，改用系統預設 Webhook</span>';
+            renderWebhookSource();
+        }
+
+        // 讓團長一眼看出現在到底是用哪一組
+        function renderWebhookSource() {
+            const el = document.getElementById('webhookSource');
+            if (!el) return;
+            let saved = null;
+            try { saved = localStorage.getItem('artale_dc_webhook'); } catch (e) { }
+            const inUse = saved || DEFAULT_WEBHOOK_URL;
+            const idMatch = inUse.match(/webhooks\/(\d+)\//);
+            const id = idMatch ? idMatch[1] : '???';
+            el.innerHTML = saved
+                ? `目前使用：<span class="text-amber-300">你自己儲存的</span>（ID ${id}）`
+                : `目前使用：<span class="text-cyan-300">系統預設</span>（ID ${id}）`;
+        }
+
+        // 真的發一則測試訊息，並且把結果講清楚。
+        // 原本送 Discord 失敗是完全靜默的，這是這次查半天的主因。
+        async function testWebhook() {
+            playSound('click');
+            const statusEl = document.getElementById('webhookStatus');
+            const url = getWebhookUrl();
+            if (!url) { statusEl.innerHTML = '<span class="text-red-400">尚未設定 Webhook</span>'; return; }
+            statusEl.innerHTML = '<span class="text-slate-400">測試發送中…</span>';
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: '🔧 Artale Raid Commander 測試訊息｜看到這則代表 Discord 通知正常' })
+                });
+                if (res.ok) {
+                    statusEl.innerHTML = '<span class="text-green-400">✅ 發送成功，請到 Discord 頻道確認</span>';
+                } else {
+                    const body = await res.text();
+                    statusEl.innerHTML = `<span class="text-red-400">❌ Discord 回傳 ${res.status}${res.status === 404 ? '（這組 Webhook 已失效，請按「清除」或貼上新的）' : ''}<br>${body.slice(0, 120)}</span>`;
+                }
+            } catch (e) {
+                statusEl.innerHTML = `<span class="text-red-400">❌ 連線失敗：${e.message}</span>`;
+            }
         }
 
         function loadWebhookInputValue() {
+            renderWebhookSource();
             const saved = getWebhookUrl();
             if (saved) {
                 document.getElementById('webhookInput').value = saved;
@@ -1413,11 +1491,12 @@
                 }]
             };
             try {
-                await fetch(webhookUrl, {
+                const res = await fetch(webhookUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(notifyPayload)
                 });
+                if (!res.ok) console.error("Discord 全員回報通知失敗:", res.status, await res.text());
             } catch (e) {
                 console.error("全員通知傳送失敗:", e);
             }
