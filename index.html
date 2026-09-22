@@ -1584,9 +1584,19 @@
 
         // 連續槓龜門檻（單位：場次）。Artale 掉寶率約 1~2%，
         // 平均要 50~100 場才會掉一次，所以門檻必須拉到這個量級才有意義。
+        //
+        // 個人與副本必須分開設。一次發布個人只累積 7 場次，
+        // 但副本累積的是「人數 × 7」，6 人團就是 42 —— 速度是個人的 6 倍。
+        // 兩者共用同一組門檻的話，副本兩次發布就觸發，天天掛著就沒有對比效果。
         const DRY_MILD = 50;
         const DRY_BAD = 100;
         const DRY_DOOM = 200;
+
+        // 副本門檻。以 P(連續 N 場沒掉) = (1-p)^N 估算，
+        // p=1% 時 150 場約五次有一次會觸發，稀有到有梗又不會永遠看不到。
+        const RAID_DRY_MILD = 150;
+        const RAID_DRY_BAD = 300;
+        const RAID_DRY_DOOM = 600;
 
         // finalized 的週次是「2026/9/14 - 2026/9/20」，drops 的時間戳是
         // 「2026/4/1 上午11:46:07」，兩者都取字串裡的第一個日期來比。
@@ -1744,7 +1754,16 @@
             return { byRaid, byPlayer };
         }
 
-        // 槓龜場次越多顯示越淒慘
+        // 副本槓龜的分級文案，越久越誇張
+        function raidDryLine(n) {
+            if (n < RAID_DRY_MILD) return '';
+            const label = `🐢 這王已經連續 <span class="font-black">${n}</span> 場沒給東西了`;
+            if (n >= RAID_DRY_DOOM) return `<div class="text-[10px] mt-1 text-red-400">💀 這王已經連續 <span class="font-black">${n}</span> 場沒給東西了，建議改拜它當神明</div>`;
+            if (n >= RAID_DRY_BAD) return `<div class="text-[10px] mt-1 text-red-400">${label}，是不是該換個王打</div>`;
+            return `<div class="text-[10px] mt-1 text-red-300">${label}</div>`;
+        }
+
+        // 槓龜場次越多顯示越淒慘（個人用）
         function dryStreakBadge(n) {
             if (!n) return '<span class="text-slate-600">—</span>';
             if (n >= DRY_DOOM) return `<span class="text-red-400 font-black">💀 ${n} 場</span>`;
@@ -1771,7 +1790,7 @@
                             <span class="font-cyber text-lg ${s.rate > 0 ? 'text-emerald-400' : 'text-slate-500'}">${s.rate.toFixed(2)}%</span>
                         </div>
                         <div class="text-[10px] text-slate-400 mt-1">出團 ${s.missions} 次　・　共 ${s.runs} 場次　・　掉落 ${s.items} 件</div>
-                        ${(dry.byRaid[s.raid] || 0) >= DRY_MILD ? `<div class="text-[10px] mt-1 text-red-300">🐢 這王已經連續 <span class="font-black">${dry.byRaid[s.raid]}</span> 場沒給東西了</div>` : ''}
+                        ${raidDryLine(dry.byRaid[s.raid] || 0)}
                         <div class="text-[10px] mt-1 italic ${f.cls}">${f.text}</div>
                     </div>`;
             }).join('');
