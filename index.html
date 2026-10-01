@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Artale Raid Commander Pro V1.6.1</title>
+    <title>Artale Raid Commander Pro V1.6.2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -137,7 +137,7 @@
             </div>
             <h1 class="text-2xl font-black italic tracking-tighter text-cyan-400 font-cyber mb-1">ARTALE</h1>
             <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Raid Commander</h2>
-            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.6.1</div>
+            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.6.2</div>
             <div id="loginLoading" class="text-cyan-500 text-sm font-bold animate-pulse"><i
                     class="fas fa-circle-notch fa-spin mr-2"></i>連線至資料庫中...</div>
             <div id="loginForm" class="hidden space-y-4">
@@ -172,7 +172,7 @@
                 <div>
                     <h1
                         class="text-3xl font-black italic tracking-tighter text-cyan-400 font-cyber drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
-                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.6.1</span></h1>
+                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.6.2</span></h1>
                     <div id="currentWeekRange"
                         class="text-[10px] text-cyan-100 font-cyber uppercase tracking-widest mt-1 opacity-70">System
                         Online</div>
@@ -788,7 +788,7 @@
             }
         }
 
-        async function init() { console.log("Artale Raid Commander Pro V1.6.1 Loaded"); updateDates(); await fetchData(); }
+        async function init() { console.log("Artale Raid Commander Pro V1.6.2 Loaded"); updateDates(); await fetchData(); }
 
         // 統一的抓資料管道。Google Apps Script 有相當比例的機率會回傳 HTML
         // 錯誤頁而不是 JSON（實測約每五次中一次），所以這裡會自動重試，
@@ -1610,6 +1610,25 @@
             return d ? d >= STATS_START : false; // 讀不出日期就不計入，寧可少算也不要亂算
         }
 
+        // 掉落紀錄的「時間」欄是後端寫入時的字串，但 Google Sheets 會自作主張
+        // 把它解析成日期值，而且用日/月順序 —— 10/1 會被存成 1 月 10 日，
+        // 整筆就被誤判成統計期間外而消失。
+        // 週次欄位是前端產生的、格式固定不會被誤解，優先用它來判斷。
+        // 沒有週次的舊資料才退回看時間欄。
+        function dropStatsDate(d) {
+            const week = d[4];
+            if (week) {
+                const ts = runTimestamp(week, d[5] || '');
+                if (ts) return ts;
+            }
+            return parseLooseDate(d[0]);
+        }
+
+        function dropInStatsPeriod(d) {
+            const dt = dropStatsDate(d);
+            return dt ? dt >= STATS_START : false;
+        }
+
         // drops 工作表是後端 append 出來的，沒有標頭列，所以不能無條件跳掉第一列，
         // 否則第一筆掉落紀錄永遠會被當成標頭吃掉。
         // 判斷方式：標頭的第一格是欄位名稱（不含數字），資料列的第一格是時間戳（必含數字）。
@@ -1646,7 +1665,7 @@
                 missionsByRaid[r.raid] = (missionsByRaid[r.raid] || 0) + 1;
             });
 
-            dropDataRows(db.drops).filter(d => isWithinStatsPeriod(d[0])).forEach(d => {
+            dropDataRows(db.drops).filter(dropInStatsPeriod).forEach(d => {
                 const raid = String(d[1]).trim();
                 const item = d[3];
                 if (!item || item === "無") return;
@@ -1710,7 +1729,7 @@
         // 建索引：哪一場有掉東西、某人在某場有沒有拿到
         function dropIndex() {
             const byRun = {}, byRunPlayer = {};
-            dropDataRows(db.drops).filter(d => isWithinStatsPeriod(d[0])).forEach(d => {
+            dropDataRows(db.drops).filter(dropInStatsPeriod).forEach(d => {
                 if (!d[3] || d[3] === '無') return;
                 const week = d[4], slot = d[5];
                 if (!week || !slot) return; // 舊資料沒有場次歸屬，無法納入連續計算
@@ -1818,7 +1837,7 @@
                 }
             });
 
-            dropDataRows(db.drops).filter(d => isWithinStatsPeriod(d[0])).forEach(d => {
+            dropDataRows(db.drops).filter(dropInStatsPeriod).forEach(d => {
                 const playerName = String(d[2] == null ? '' : d[2]).trim();
                 const item = d[3];
                 if (stats[playerName] && item && item !== "無") {
