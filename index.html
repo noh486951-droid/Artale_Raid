@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Artale Raid Commander Pro V1.7.0</title>
+    <title>Artale Raid Commander Pro V1.7.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -137,7 +137,7 @@
             </div>
             <h1 class="text-2xl font-black italic tracking-tighter text-cyan-400 font-cyber mb-1">ARTALE</h1>
             <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Raid Commander</h2>
-            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.7.0</div>
+            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.7.1</div>
             <div id="loginLoading" class="text-cyan-500 text-sm font-bold animate-pulse"><i
                     class="fas fa-circle-notch fa-spin mr-2"></i>連線至資料庫中...</div>
             <div id="loginForm" class="hidden space-y-4">
@@ -172,7 +172,7 @@
                 <div>
                     <h1
                         class="text-3xl font-black italic tracking-tighter text-cyan-400 font-cyber drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
-                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.7.0</span></h1>
+                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.7.1</span></h1>
                     <div id="currentWeekRange"
                         class="text-[10px] text-cyan-100 font-cyber uppercase tracking-widest mt-1 opacity-70">System
                         Online</div>
@@ -837,7 +837,7 @@
             }
         }
 
-        async function init() { console.log("Artale Raid Commander Pro V1.7.0 Loaded"); updateDates(); await fetchData(); }
+        async function init() { console.log("Artale Raid Commander Pro V1.7.1 Loaded"); updateDates(); await fetchData(); }
 
         // 統一的抓資料管道。Google Apps Script 有相當比例的機率會回傳 HTML
         // 錯誤頁而不是 JSON（實測約每五次中一次），所以這裡會自動重試，
@@ -1214,6 +1214,11 @@
             // 主力副本排第一，其餘照原本順序
             const order = [DEFAULT_RAID].concat(Object.keys(bossData).filter(k => k !== DEFAULT_RAID));
 
+            // 累計掉寶率（統計期間起算，跟排行榜同一套算法）。整個重算一次，各卡片查表
+            const rateByRaid = {};
+            computeRaidStats().forEach(r => { rateByRaid[r.raid] = r; });
+            const dry = computeDryStreaks();
+
             box.innerHTML = order.map(key => {
                 const st = raidCardStats(key, weekStr);
                 const me = st.people.find(p => p.name === currentUser);
@@ -1235,6 +1240,16 @@
                 // 龍王要靠外援湊滿，團員全填也只有 6/12，這才是真實的缺口。
                 const need = st.info.min || st.total;
                 const pct = need ? Math.min(100, Math.round(st.filled / need * 100)) : 0;
+
+                // 沒打過（統計期間內沒有發布場次）就整段不顯示
+                const rs = rateByRaid[st.info.name];
+                let rateLine = '';
+                if (rs && rs.runs > 0) {
+                    const fl = raidRateFlavor(rs.rate, rs.runs);
+                    rateLine = `<div class="text-[11px] mt-1"><span class="text-amber-300 font-bold"><i class="fas fa-dice mr-1"></i>掉寶率（累計）</span> <span class="text-white font-bold">${rs.rate.toFixed(2)}%</span> <span class="text-slate-400">${rs.runs} 場次・${rs.items} 件</span></div>
+                        <div class="text-[10px] mt-0.5 italic ${fl.cls}">${fl.text}</div>
+                        ${raidDryLine(dry.byRaid[st.info.name] || 0)}`;
+                }
 
                 // 王的圖是主視覺。各張圖比例差很多（龍王是直的、炎魔是扁的），
                 // 直接 object-cover 會把龍王裁到只剩一條，所以前景用 contain 完整顯示，
@@ -1266,6 +1281,7 @@
                         <div class="flex flex-wrap gap-1.5 mt-3">${st.people.map(raidPersonChip).join('')}</div>
                         <div class="text-[11px] mt-3"><span class="text-slate-400 font-bold"><i class="fas fa-clock mr-1"></i>最多人時段</span> ${bestLine}</div>
                         ${pubLine}
+                        ${rateLine}
                         <div class="flex gap-2 mt-4">
                             <button onclick="event.stopPropagation(); openRaidDetail('${key}', true)"
                                 class="flex-1 bg-cyan-500 hover:bg-cyan-400 text-slate-950 px-3 py-2 rounded-xl text-xs font-black transition-all"><i class="fas fa-calendar-check mr-1"></i>填寫我的空檔</button>
