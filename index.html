@@ -242,7 +242,23 @@
                     class="fas fa-desktop text-violet-400 animate-pulse"></i> 一鍵安全區遊戲置頂</button>
         </div>
 
-        <div class="grid grid-cols-12 gap-6">
+        <!-- 副本總覽：登入後先看到所有副本的回報狀況，點卡片才進排程 -->
+        <section id="raidOverview" class="mb-6">
+            <div class="flex items-end justify-between mb-4 gap-3 flex-wrap">
+                <div>
+                    <h2 class="text-xl font-black font-cyber italic tracking-tighter drop-shadow-md">RAID OVERVIEW</h2>
+                    <p class="text-[11px] text-slate-400 mt-1">點副本卡片查看排程，或直接按「填寫我的空檔」</p>
+                </div>
+            </div>
+            <div id="raidCards" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </section>
+
+        <div id="raidDetail" class="grid grid-cols-12 gap-6 hidden">
+            <div class="col-span-12">
+                <button onclick="backToOverview()"
+                    class="flex items-center gap-2 bg-black/40 hover:bg-cyan-900/40 border border-white/10 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-300 px-4 py-2 rounded-xl text-xs font-bold transition-all backdrop-blur-sm"><i
+                        class="fas fa-arrow-left"></i> 返回副本總覽</button>
+            </div>
             <aside class="col-span-12 lg:col-span-4 space-y-6">
                 <div
                     class="glass-card overflow-hidden rounded-3xl relative min-h-[160px] flex flex-col justify-end border-t border-white/20">
@@ -1105,6 +1121,186 @@
 
             renderPersonalDashboard();
             renderGrid();
+            renderRaidOverview();
+        }
+
+        // ================= 副本總覽 =================
+        // 總覽只是在原本的詳細頁上面多一層：點卡片時把 raidSelect 設成那個副本，
+        // 再顯示原本的詳細頁。排程表、回報、掉落、團長功能都完全沿用，不用改。
+        let viewMode = 'overview';
+        const OVERVIEW_BG = '#05070f';
+        const DAY_ZH = { Mon: '週一', Tue: '週二', Wed: '週三', Thu: '週四', Fri: '週五', Sat: '週六', Sun: '週日' };
+        const DAY_ORDER = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+
+        function escHtml(v) {
+            return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        function slotLabel(slot) {
+            const m = String(slot).match(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)-(.+)$/);
+            return m ? `${DAY_ZH[m[1]]} ${m[2]}` : String(slot);
+        }
+
+        function slotSortKey(slot) {
+            const m = String(slot).match(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)-(\d{1,2}):(\d{2})/);
+            return m ? DAY_ORDER[m[1]] * 10000 + Number(m[2]) * 100 + Number(m[3]) : 99999;
+        }
+
+        // 某副本在指定週次的回報狀況。判斷規則與 renderGrid 一致：
+        // 新格式看 parsed[raidKey]，舊的扁平格式則對每個副本都算數。
+        function raidCardStats(raidKey, weekStr) {
+            const info = bossData[raidKey];
+            const members = db.members.slice(1).map(m => m[0]);
+            const rowOf = {};
+            db.schedules.forEach(s => { if (s[0] === weekStr) rowOf[s[1]] = s[2]; });
+
+            const slotCount = {};
+            const people = members.map(name => {
+                const raw = rowOf[name];
+                if (raw === undefined) return { name, status: 'none' };   // 本週完全沒回報
+                if (raw === 'OFF') return { name, status: 'off' };       // 本週全休
+                let slots = [], runs = null;
+                try {
+                    const parsed = JSON.parse(raw);
+                    const isNew = KNOWN_RAID_KEYS.some(k => parsed[k] !== undefined);
+                    const rd = isNew ? (parsed[raidKey] || {}) : parsed;
+                    slots = Object.keys(rd).filter(k => k.indexOf('__') !== 0 && rd[k]);
+                    runs = rd.__runs__ || null;
+                } catch (e) { }
+                slots.forEach(c => { slotCount[c] = (slotCount[c] || 0) + 1; });
+                // 有回報但沒填這個副本的時段 → 對這個副本來說等於還沒填
+                return { name, status: slots.length ? 'in' : 'other', runs };
+            });
+
+            const best = Object.keys(slotCount)
+                .sort((a, b) => slotCount[b] - slotCount[a] || slotSortKey(a) - slotSortKey(b))[0] || null;
+
+            const published = [];
+            (db.finalized || []).slice(1).forEach(f => {
+                if (String(f[0]).trim() !== weekStr || String(f[1]).trim() !== info.name) return;
+                const slot = String(f[2]).trim();
+                if (published.indexOf(slot) === -1) published.push(slot);
+            });
+            published.sort((a, b) => slotSortKey(a) - slotSortKey(b));
+
+            return {
+                info, people, published,
+                filled: people.filter(p => p.status === 'in').length,
+                off: people.filter(p => p.status === 'off').length,
+                total: members.length,
+                best, bestCount: best ? slotCount[best] : 0
+            };
+        }
+
+        function raidPersonChip(p) {
+            const n = escHtml(p.name);
+            if (p.status === 'in') {
+                const runs = p.runs ? `<span class="opacity-70 font-normal ml-0.5">${escHtml(p.runs)}</span>` : '';
+                return `<span class="bg-cyan-500/20 border border-cyan-400/40 text-cyan-100 px-2 py-0.5 rounded-md text-[10px] font-bold">${n}${runs}</span>`;
+            }
+            if (p.status === 'off') {
+                return `<span class="bg-slate-800/80 border border-slate-600/40 text-slate-400 px-2 py-0.5 rounded-md text-[10px]">${n}<span class="ml-0.5 opacity-70">休</span></span>`;
+            }
+            return `<span class="border border-dashed border-slate-600/50 text-slate-500 px-2 py-0.5 rounded-md text-[10px]">${n}</span>`;
+        }
+
+        function renderRaidOverview() {
+            const box = document.getElementById('raidCards');
+            if (!box || !db) return;
+
+            if (viewMode === 'overview') {
+                document.getElementById('pageBg').style.backgroundColor = OVERVIEW_BG;
+                document.getElementById('overlayToggleBtn').classList.add('hidden');
+            }
+
+            const weekStr = document.getElementById('currentWeekRange').innerText;
+            // 主力副本排第一，其餘照原本順序
+            const order = [DEFAULT_RAID].concat(Object.keys(bossData).filter(k => k !== DEFAULT_RAID));
+
+            box.innerHTML = order.map(key => {
+                const st = raidCardStats(key, weekStr);
+                const me = st.people.find(p => p.name === currentUser);
+                const meLine = !me ? ''
+                    : me.status === 'in' ? '<span class="text-emerald-300">✓ 你已填寫</span>'
+                    : me.status === 'off' ? '<span class="text-slate-400">你本週休假</span>'
+                    : '<span class="text-amber-300">你還沒填這個副本</span>';
+
+                const enough = st.bestCount >= st.info.min;
+                const bestLine = st.best
+                    ? `<span class="${enough ? 'text-emerald-300' : 'text-slate-300'}">${slotLabel(st.best)}・${st.bestCount} 人${enough ? ' ✓ 達標' : `（需 ${st.info.min} 人）`}</span>`
+                    : '<span class="text-slate-500">還沒有人填時段</span>';
+
+                const pubLine = st.published.length
+                    ? `<div class="text-[11px] mt-1"><span class="text-indigo-300 font-bold"><i class="fas fa-flag mr-1"></i>已發布</span> <span class="text-white">${st.published.map(slotLabel).join('、')}</span></div>`
+                    : '';
+
+                const pct = st.total ? Math.round(st.filled / st.total * 100) : 0;
+
+                return `
+                <div onclick="openRaidDetail('${key}')"
+                    class="glass-card relative overflow-hidden rounded-3xl border border-white/10 hover:border-cyan-400/50 cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-[0_0_25px_rgba(34,211,238,0.15)]"
+                    style="background-color:${st.info.bgColor}">
+                    <img src="${st.info.img}" class="absolute inset-0 w-full h-full object-cover opacity-25 mix-blend-screen pointer-events-none"
+                        onerror="this.style.display='none'">
+                    <div class="absolute inset-0 bg-gradient-to-r from-black/90 via-black/70 to-black/40 pointer-events-none"></div>
+                    <div class="relative p-5">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <h3 class="text-lg font-black text-white drop-shadow truncate">${escHtml(st.info.name)}</h3>
+                                <div class="text-[11px] mt-0.5">${meLine}</div>
+                            </div>
+                            <div class="text-right shrink-0">
+                                <div class="text-2xl font-black font-cyber ${st.filled ? 'text-cyan-300' : 'text-slate-500'}">${st.filled}<span class="text-sm text-slate-400">/${st.total}</span></div>
+                                <div class="text-[10px] text-slate-400">已填寫${st.off ? `・${st.off} 休` : ''}</div>
+                            </div>
+                        </div>
+                        <div class="h-1 bg-white/10 rounded-full mt-3 overflow-hidden"><div class="h-full bg-cyan-400/70" style="width:${pct}%"></div></div>
+                        <div class="flex flex-wrap gap-1.5 mt-3">${st.people.map(raidPersonChip).join('')}</div>
+                        <div class="text-[11px] mt-3"><span class="text-slate-400 font-bold"><i class="fas fa-clock mr-1"></i>最多人時段</span> ${bestLine}</div>
+                        ${pubLine}
+                        <div class="flex gap-2 mt-4">
+                            <button onclick="event.stopPropagation(); openRaidDetail('${key}', true)"
+                                class="flex-1 bg-cyan-500 hover:bg-cyan-400 text-slate-950 px-3 py-2 rounded-xl text-xs font-black transition-all"><i class="fas fa-calendar-check mr-1"></i>填寫我的空檔</button>
+                            <button onclick="event.stopPropagation(); openRaidDetail('${key}')"
+                                class="bg-white/10 hover:bg-white/20 text-slate-200 px-3 py-2 rounded-xl text-xs font-bold transition-all">查看排程 <i class="fas fa-chevron-right ml-1"></i></button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // 切換副本時把團長選的時段清掉，避免拿 A 副本選的格子去發布 B 副本
+        function clearAdminSelection() {
+            adminSelection = null;
+            ['btnFinalize', 'btnDropDistribute', 'btnChangeRaid'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = true;
+            });
+            const lbl = document.getElementById('selectedTimeLabel');
+            if (lbl) lbl.innerText = '尚未選取時段';
+        }
+
+        function openRaidDetail(raidKey, startReport) {
+            playSound('click');
+            viewMode = 'detail';
+            document.getElementById('raidSelect').value = raidKey;
+            clearAdminSelection();
+            document.getElementById('raidOverview').classList.add('hidden');
+            document.getElementById('raidDetail').classList.remove('hidden');
+            updateUI();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (startReport) startReportMode();
+        }
+
+        function backToOverview() {
+            playSound('click');
+            if (isReporting) cancelReportMode();
+            viewMode = 'overview';
+            clearAdminSelection();
+            document.getElementById('raidDetail').classList.add('hidden');
+            document.getElementById('raidOverview').classList.remove('hidden');
+            renderRaidOverview();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         // 讀出某人在某副本登記的本週次數（未登記或休假回 null）
