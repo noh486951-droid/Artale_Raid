@@ -224,9 +224,6 @@
             <a href="https://a2983456456.github.io/artale-drop/" target="_blank"
                 class="flex items-center gap-2 bg-black/40 hover:bg-cyan-900/40 border border-white/10 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-300 px-4 py-2 rounded-xl text-xs font-bold transition-all backdrop-blur-sm shadow-sm"><i
                     class="fas fa-search-dollar text-cyan-400"></i> 全怪物掉落物查詢</a>
-            <a href="https://artale-market.org/" target="_blank"
-                class="flex items-center gap-2 bg-black/40 hover:bg-pink-900/40 border border-white/10 hover:border-pink-500/50 text-slate-300 hover:text-pink-300 px-4 py-2 rounded-xl text-xs font-bold transition-all backdrop-blur-sm shadow-sm"><i
-                    class="fas fa-store text-pink-400"></i> 第三方自由交易平台</a>
             <a href="https://docs.google.com/spreadsheets/d/1lPS_dyOfFe04SbmavvqAZT6GVTOuN-F-qSXDhQlpfUY/edit?gid=0#gid=0"
                 target="_blank"
                 class="flex items-center gap-2 bg-black/40 hover:bg-yellow-900/40 border border-white/10 hover:border-yellow-500/50 text-slate-300 hover:text-yellow-300 px-4 py-2 rounded-xl text-xs font-bold transition-all backdrop-blur-sm shadow-sm"><i
@@ -1236,25 +1233,33 @@
 
                 const pct = st.total ? Math.round(st.filled / st.total * 100) : 0;
 
+                // 王的圖是主視覺。各張圖比例差很多（龍王是直的、炎魔是扁的），
+                // 直接 object-cover 會把龍王裁到只剩一條，所以前景用 contain 完整顯示，
+                // 背景再鋪一張模糊放大的同圖，填滿兩側又不會出現黑邊。
                 return `
                 <div onclick="openRaidDetail('${key}')"
-                    class="glass-card relative overflow-hidden rounded-3xl border border-white/10 hover:border-cyan-400/50 cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-[0_0_25px_rgba(34,211,238,0.15)]"
-                    style="background-color:${st.info.bgColor}">
-                    <img src="${st.info.img}" class="absolute inset-0 w-full h-full object-cover opacity-25 mix-blend-screen pointer-events-none"
-                        onerror="this.style.display='none'">
-                    <div class="absolute inset-0 bg-gradient-to-r from-black/90 via-black/70 to-black/40 pointer-events-none"></div>
-                    <div class="relative p-5">
-                        <div class="flex items-start justify-between gap-3">
+                    class="group bg-slate-950 overflow-hidden rounded-3xl border border-white/10 hover:border-cyan-400/60 cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-[0_0_30px_rgba(34,211,238,0.18)]">
+                    <div class="relative h-48 sm:h-56 overflow-hidden" style="background-color:${st.info.bgColor}">
+                        <img src="${st.info.img}" alt="" aria-hidden="true"
+                            class="absolute inset-0 w-full h-full object-cover blur-2xl scale-125 opacity-60 pointer-events-none"
+                            onerror="this.style.display='none'">
+                        <img src="${st.info.img}" alt="${escHtml(st.info.name)}"
+                            class="relative block h-full max-w-full mx-auto object-contain drop-shadow-[0_10px_24px_rgba(0,0,0,0.7)] transition-transform duration-500 group-hover:scale-105 pointer-events-none"
+                            onerror="this.style.display='none'">
+                        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent pointer-events-none"></div>
+                        <div class="absolute bottom-0 left-0 right-0 px-5 pb-3 flex items-end justify-between gap-3">
                             <div class="min-w-0">
-                                <h3 class="text-lg font-black text-white drop-shadow truncate">${escHtml(st.info.name)}</h3>
-                                <div class="text-[11px] mt-0.5">${meLine}</div>
+                                <h3 class="text-xl font-black text-white truncate" style="text-shadow:0 2px 10px rgba(0,0,0,.95)">${escHtml(st.info.name)}</h3>
+                                <div class="text-[11px] mt-0.5" style="text-shadow:0 1px 6px rgba(0,0,0,.95)">${meLine}</div>
                             </div>
-                            <div class="text-right shrink-0">
-                                <div class="text-2xl font-black font-cyber ${st.filled ? 'text-cyan-300' : 'text-slate-500'}">${st.filled}<span class="text-sm text-slate-400">/${st.total}</span></div>
-                                <div class="text-[10px] text-slate-400">已填寫${st.off ? `・${st.off} 休` : ''}</div>
+                            <div class="text-right shrink-0" style="text-shadow:0 2px 10px rgba(0,0,0,.95)">
+                                <div class="text-3xl font-black font-cyber leading-none ${st.filled ? 'text-cyan-300' : 'text-slate-400'}">${st.filled}<span class="text-sm text-slate-300">/${st.total}</span></div>
+                                <div class="text-[10px] text-slate-300 mt-1">已填寫${st.off ? `・${st.off} 休` : ''}</div>
                             </div>
                         </div>
-                        <div class="h-1 bg-white/10 rounded-full mt-3 overflow-hidden"><div class="h-full bg-cyan-400/70" style="width:${pct}%"></div></div>
+                    </div>
+                    <div class="px-5 pb-5">
+                        <div class="h-1 bg-white/10 rounded-full overflow-hidden"><div class="h-full bg-cyan-400/70" style="width:${pct}%"></div></div>
                         <div class="flex flex-wrap gap-1.5 mt-3">${st.people.map(raidPersonChip).join('')}</div>
                         <div class="text-[11px] mt-3"><span class="text-slate-400 font-bold"><i class="fas fa-clock mr-1"></i>最多人時段</span> ${bestLine}</div>
                         ${pubLine}
