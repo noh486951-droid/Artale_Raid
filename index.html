@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Artale Raid Commander Pro V1.7.2</title>
+    <title>Artale Raid Commander Pro V1.7.3</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -137,7 +137,7 @@
             </div>
             <h1 class="text-2xl font-black italic tracking-tighter text-cyan-400 font-cyber mb-1">ARTALE</h1>
             <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Raid Commander</h2>
-            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.7.2</div>
+            <div class="text-[9px] text-cyan-500/50 font-bold mb-8 uppercase tracking-widest border border-cyan-500/20 rounded px-2 py-0.5 inline-block">VERSION 1.7.3</div>
             <div id="loginLoading" class="text-cyan-500 text-sm font-bold animate-pulse"><i
                     class="fas fa-circle-notch fa-spin mr-2"></i>連線至資料庫中...</div>
             <div id="loginForm" class="hidden space-y-4">
@@ -172,7 +172,7 @@
                 <div>
                     <h1
                         class="text-3xl font-black italic tracking-tighter text-cyan-400 font-cyber drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
-                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.7.2</span></h1>
+                        ARTALE COMMANDER <span class="text-[10px] bg-cyan-900/50 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30 font-sans normal-case ml-2">V1.7.3</span></h1>
                     <div id="currentWeekRange"
                         class="text-[10px] text-cyan-100 font-cyber uppercase tracking-widest mt-1 opacity-70">System
                         Online</div>
@@ -837,7 +837,7 @@
             }
         }
 
-        async function init() { console.log("Artale Raid Commander Pro V1.7.2 Loaded"); updateDates(); await fetchData(); }
+        async function init() { console.log("Artale Raid Commander Pro V1.7.3 Loaded"); updateDates(); await fetchData(); }
 
         // 統一的抓資料管道。Google Apps Script 有相當比例的機率會回傳 HTML
         // 錯誤頁而不是 JSON（實測約每五次中一次），所以這裡會自動重試，
@@ -1112,6 +1112,7 @@
             document.getElementById('overlayToggleBtn').classList.toggle('hidden', raidKey !== 'papu_h');
             if (document.getElementById('raidNotes')) document.getElementById('raidNotes').innerText = `最低人數: ${raidInfo.min} 人\n必要職業: ${raidInfo.req.join('、') || '無特別限制'}`;
             document.getElementById('lootWishlist').innerHTML = `<option value="">(無)</option>` + raidInfo.loot.map(item => `<option value="${item}">${item}</option>`).join('');
+            document.getElementById('weeklyRuns').innerHTML = runRuleOfKey(raidKey).options.map(n => `<option value="${n}">${n} 次</option>`).join('');
             updatePendingList();
             document.getElementById('chatBox').innerHTML = db.chat.slice(1).reverse().map(c => `<div class="mb-1.5 leading-relaxed"><span class="text-cyan-300 font-bold">${c[1]}:</span> <span class="text-slate-300">${c[2]}</span></div>`).join('');
             if (isReporting) cancelReportMode();
@@ -1362,9 +1363,9 @@
 
             const runsMap = buildRunsMap(reportedSchedules, raidKey);
             const runNames = Object.keys(runsMap);
-            const c7 = runNames.filter(n => Number(runsMap[n]) === 7).length;
-            const c14 = runNames.filter(n => Number(runsMap[n]) === 14).length;
-            document.getElementById('runsSummary').innerHTML = runNames.length === 0 ? '' : `7 次：<span class="text-amber-300 font-bold">${c7}</span> 人　・　14 次：<span class="text-amber-300 font-bold">${c14}</span> 人`;
+            const runOpts = runRuleOfKey(raidKey).options;
+            document.getElementById('runsSummary').innerHTML = runNames.length === 0 ? '' : runOpts.map(n =>
+                `${n} 次：<span class="text-amber-300 font-bold">${runNames.filter(x => Number(runsMap[x]) === n).length}</span> 人`).join('　・　');
             document.getElementById('runsBox').innerHTML = runNames.length === 0 ? '<div class="text-[10px] text-slate-500 italic">尚無人登記本週次數</div>' : runNames.map(n => `<div class="text-[11px] bg-amber-900/20 border border-amber-500/20 px-2 py-1 rounded text-amber-100 mb-1 flex justify-between"><span>${n}</span> <span class="font-bold text-amber-400">${runsMap[n]} 次</span></div>`).join('');
         }
 
@@ -1425,7 +1426,10 @@
             if (existing && existing[2] !== "OFF") { try { let parsed = JSON.parse(existing[2]); const isNewFormat = KNOWN_RAID_KEYS.some(k => parsed[k] !== undefined); if (!isNewFormat) { globalMasterSchedule = { [raidKey]: parsed }; } else { globalMasterSchedule = parsed; } } catch (e) { } }
             selectedTimes = globalMasterSchedule[raidKey] || {};
             document.getElementById('lootWishlist').value = selectedTimes.__wish__ ? selectedTimes.__wish__ : "";
-            document.getElementById('weeklyRuns').value = selectedTimes.__runs__ ? String(selectedTimes.__runs__) : "7";
+            // 之前存的次數若不在這個副本的選項裡（例如龍王存了 14），就改帶第一個選項
+            const runOpts = runRuleOfKey(raidKey).options;
+            const savedRuns = Number(selectedTimes.__runs__);
+            document.getElementById('weeklyRuns').value = String(runOpts.indexOf(savedRuns) !== -1 ? savedRuns : runOpts[0]);
             renderGrid();
         }
 
@@ -1839,6 +1843,27 @@
         // 掉寶率的分母是場次，不是發布次數。
         const RUNS_PER_MISSION = 7;
 
+        // 各副本的「本週次數」選項，以及一次發布每人打幾場。
+        // missionRuns 依「本週同副本第幾次發布」取值，超出長度就沿用最後一個：
+        //   一般副本 [7]   ：每次發布都是 7 場，一週 14 次 = 發布兩次
+        //   龍王     [4, 3]：本週第一次發布 4 場、第二次 3 場，加起來剛好 7 次
+        // 要跟 GAS 的 MISSION_RUNS_BY_RAID 保持一致。
+        const RAID_RUN_RULES = {
+            kressel:  { options: [7, 14], missionRuns: [7] },
+            zakum:    { options: [7, 14], missionRuns: [7] },
+            papu_h:   { options: [7, 14], missionRuns: [7] },
+            horntail: { options: [4, 7],  missionRuns: [4, 3] }
+        };
+
+        function runRuleOfKey(key) {
+            return RAID_RUN_RULES[key] || { options: [7, 14], missionRuns: [RUNS_PER_MISSION] };
+        }
+
+        function runRuleOfName(name) {
+            const key = Object.keys(bossData).find(k => bossData[k].name === name);
+            return runRuleOfKey(key);
+        }
+
         // 連續槓龜門檻（單位：場次）。Artale 掉寶率約 1~2%，
         // 平均要 50~100 場才會掉一次，所以門檻必須拉到這個量級才有意義。
         //
@@ -1917,8 +1942,8 @@
             const itemsByRaid = {};     // 副本 -> 掉落件數
 
             statsRuns().forEach(r => {
-                // 一次發布 = 每位參戰者各打 RUNS_PER_MISSION 場
-                runsByRaid[r.raid] = (runsByRaid[r.raid] || 0) + r.players.length * RUNS_PER_MISSION;
+                // 一次發布 = 每位參戰者各打 r.runs 場（依副本規則與本週第幾次發布）
+                runsByRaid[r.raid] = (runsByRaid[r.raid] || 0) + r.players.length * r.runs;
                 missionsByRaid[r.raid] = (missionsByRaid[r.raid] || 0) + 1;
             });
 
@@ -1970,7 +1995,7 @@
 
         // 統計期間內、已去重、依時間排好的場次
         function statsRuns() {
-            return uniqueFinalizedRuns(db.finalized)
+            const list = uniqueFinalizedRuns(db.finalized)
                 .filter(f => isWithinStatsPeriod(f[0]))
                 .map(f => ({
                     week: String(f[0]).trim(),
@@ -1981,6 +2006,17 @@
                 }))
                 .filter(r => r.ts)
                 .sort((a, b) => a.ts - b.ts);
+
+            // 已按時間排好，所以同一週同副本出現的順序就是「第幾次發布」
+            const nth = {};
+            list.forEach(r => {
+                const k = r.week + '|' + r.raid;
+                const idx = nth[k] || 0;
+                nth[k] = idx + 1;
+                const sched = runRuleOfName(r.raid).missionRuns;
+                r.runs = sched[Math.min(idx, sched.length - 1)];
+            });
+            return list;
         }
 
         // 建索引：哪一場有掉東西、某人在某場有沒有拿到
@@ -2021,11 +2057,11 @@
             const byRaid = {}, byPlayer = {};
             Object.keys(raidRuns).forEach(raid => {
                 byRaid[raid] = countBack(raidRuns[raid], r => idx.byRun[`${r.week}|${r.slot}`],
-                    r => r.players.length * RUNS_PER_MISSION);
+                    r => r.players.length * r.runs);
             });
             Object.keys(playerRuns).forEach(p => {
                 byPlayer[p] = countBack(playerRuns[p], r => idx.byRunPlayer[`${r.week}|${r.slot}|${p}`],
-                    () => RUNS_PER_MISSION);
+                    r => r.runs);
             });
             return { byRaid, byPlayer };
         }
@@ -2084,14 +2120,8 @@
                 stats[m[0]] = { name: m[0], runs: 0, dropCount: 0, items: [] };
             });
 
-            uniqueFinalizedRuns(db.finalized).filter(f => isWithinStatsPeriod(f[0])).forEach(f => {
-                const participantsStr = f[3] || "";
-                if (participantsStr) {
-                    participantsStr.split(",").forEach(p => {
-                        const name = String(p).trim();
-                        if (stats[name]) stats[name].runs += RUNS_PER_MISSION;
-                    });
-                }
+            statsRuns().forEach(r => {
+                r.players.forEach(name => { if (stats[name]) stats[name].runs += r.runs; });
             });
 
             dropDataRows(db.drops).filter(dropInStatsPeriod).forEach(d => {
